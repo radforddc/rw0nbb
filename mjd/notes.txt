@@ -1,0 +1,113 @@
+UPDATED nores,txt, starting from August 2019 when codes were reqritten
+
+TODO:
+
+[ ADD Gretina4A support to: compress*, decompress*, run_check, siginspect, prebuild ]
+[ anl_firmware: crate 2 slot 6 -> detectors 29, 30, 34, [37], 44  (37 disabled) ]
+
+drift-time cuts??
+c2p1d4 (ch 32) PZ/DCR instability
+10 Mz noise subtraction
+burst cut
+
+track down rundiff / rundiff2 bug in DS0
+
+=====================================
+
+How to handle chs with no pulser?
+            - 42; 142, *138*
+           ?- use calibration runs?
+           ?- scale 138 LG slopes from HG?
+           ?- why no pulsers in 138? 38 sees plenty. Is it just these runs?
+
+dCoding:
+get rid of oldTime in eventbuild.c?
+
+        add a check on "expected pulser counts" based on duration of run
+        investigate rate-oscillation runs
+        improved way of finding narrowest peak in CTprocess/ep_finalize
+
+        EnergyCal stability
+        Veto logic
+        LN-fill (20 mins) and noise-burst veto
+        Reading stage 1 baselines, HV currents?
+        General clean-up, e.g. too many little undocumented hacks
+
+Tuning/results:
+        Check/tune data cleaning cuts
+              ?- does slope cut remove early low-ampl pulses due to walk?
+              ?- increase margin of error for baseline, rms, slope, pulser-tag energy?
+
+Some files to process:
+
+   - DS0/DS1 without trigger card???  Try prebuilding?
+             2016-1-20-P3KJR_Run9768  - Ge delta-time = 6440 s
+             2016-2-7-P3KJR_Run10329  - More than 200 sub-events in built event!
+             2016-3-14-P3KJR_Run11944 - both polarities? Multiple pulser peaks
+             
+-------------------------------------------------------------------
+
+Some thoughts about the DCR cut
+===============================
+
+- The Signal acceptance  of the DCR cut should be evaluated with the DE peak, not continuum or FE peak
+- Need pileup rejection of calib signals to evaluate acceptance?
+- Need to cut on baseline value and slope of calib signals to evaluate acceptance?
+- Does calib signal acceptance overlap with Li signal degradation / bb peak acceptance?
+- Using presummed (longer) signals gives some increase in DCR sensitivity, probably 20% - 40% or so
+- The delayed charge appears to continue for ~25 us in at least some cases. Need to check that for more detectors...
+- Should be able to extract rough radius from drift time, comparing e.g. t(1-70%) expt vs sim
+- Temperature-dependence of DCR release time?
+
+-------------------------------------------------------------------
+
+head -1 *.lis | grep ds5 > ptag.sh
+sed "s\ds5\pulser_tag_init ds5\g" ptag.sh > j; mv j ptag.sh
+emacs -> add text:
+  pulser_tag_init ds5/2016-11-10-P3LQK_Run19502 | tee out/ptag19502.txt
+
+
+qsub -IV
+qsub <command>
+qstat
+showq
+
+
+    p3kjr 2015.12.24 -
+DS3 p3kjr 2016.09.09 - 2016.10.10
+DS4 p3lqg 2016.09.09 - 2016.10.10
+    p3lqh 2016.10.12 - 2016.10.13
+    p3lqj 2016.10.12 - 2016.10.13
+DS5 p3lqk 2016.10.13 -
+
+===============================================
+git:
+
+instead of "svn co" do
+git clone https://github.com/mppmu/GAT.git
+
+instead of "svn update" do
+git pull   (do this before a push?)
+
+instead of "svn commit" do
+git commit [files]
+git push
+
+also
+git add <filename>
+If you want to set the editor only for Git, do either (you don’t need both):
+
+Set core.editor in your Git config: git config --global core.editor "emacs"
+Set the GIT_EDITOR environment variable: export GIT_EDITOR=emacs
+
+===============================================
+
+library PSA:
+            DEP       SEP        FEP    Continuum
+    A/E   6762(89)    730(52)   7939(89)   41484    sp 3
+A/E-PSA   6659(88)    659(50)   6808(83)            sp 3 - 9
+   Diff    103         71       1131        2215    sp 9
+      %    1.5        9.7       14.2         5.3
+PSA   6791(89)    805(53)   8214(91)   42638    sp 10
+
+
