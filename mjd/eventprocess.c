@@ -883,7 +883,8 @@ int eventprocess(MJDetInfo *Dets, MJRunInfo *runInfo, int nChData, BdEvent *ChDa
           if (WRITE_SIGS && chan < runInfo->nGe) {
             // && e_ctc > 2605 && e_ctc < 2625 &&  // TEMPORARY
             //  (aovere > 0.96*PSA.ae_cut[chan] || PSA.ae_cut[chan] < 100)) {  // TEMPORARY
-            // fprintf(f_2d, "%6.1f, %6.1f, c%2.2d\n", e_ctc, aovere * 800.0/PSA.ae_pos[chan], chan);
+            if (MAKE_2D)
+              fprintf(f_2d, "%6.1f, %6.1f, c%2.2d\n", e_ctc, aovere * 800.0/PSA.ae_pos[chan], chan);
 
             /* write out good 2614-keV signals */
             /* find mean baseline value        */

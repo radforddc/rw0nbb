@@ -186,7 +186,7 @@ int eval(float *pars, float *sig, int tlo, int thi, float *fit, float deriv[NP][
 
   double decay = pars[1], decay2 = pars[6];   // fractional drop in height over one time step
   float  baseline = pars[5], frac2 = pars[2];
-  float  base=0, e1, e2, e3=0, e4;
+  float  base=0, e2, e3=0, e4;
   int    i;
   // float  fsig[TRACE_LEN];
 
@@ -198,12 +198,10 @@ int eval(float *pars, float *sig, int tlo, int thi, float *fit, float deriv[NP][
   deriv[1][tlo-1] = 0;
 
   /* start at beginning to do PZ correction, going as far as tlo */
-  e1 = e2 = sig[30];
+  e2 = sig[30];
   for (i = 31; i < tlo; i++) {
-    // e1 += sig[i] - e2 + (e2-base)*decay;
     e3 += sig[i] - e2 - e3*decay2;
     e2  = sig[i];
-    // fsig[i] = e1 - frac2*e3; // pz-corrected
   }
 
   float s = (sig[tlo-1] + sig[tlo] + sig[tlo+1]) / 3.0;
@@ -214,10 +212,8 @@ int eval(float *pars, float *sig, int tlo, int thi, float *fit, float deriv[NP][
 
   /* continue to do PZ correction, now calculating derivatives */
   for (; i <= thi; i++) {
-    // e1 += sig[i] - e2 + (e2-base)*decay;
     e3 += sig[i] - e2 - e3*decay2;
     e2  = sig[i];
-    // fsig[i] = e1 - frac2*e3; // pz-corrected
     deriv[0][i] = e4/pars[0];
     deriv[1][i] = -e4*(double)(i-tlo+1);
     deriv[2][i] = e3;

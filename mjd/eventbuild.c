@@ -190,7 +190,7 @@ int eventprescan(FILE *f_in, FILE *ps_f_out, MJDetInfo *Dets, MJRunInfo *runInfo
 int eventbuild(FILE *f_in, MJDetInfo *Dets, MJRunInfo *runInfo) {
 #endif
 
-  int    i, j, k, n, crate=0, slot=0, board, evlen, ch, chan=0, nmod, ee, e_onbd;
+  int    i, j, k, n, crate=0, slot=0, board, evlen, ch, chan=0, nmod, ee;
   unsigned int  head[2], evtdat[20000];
   static int    dataId[32], goodDataId[32], idNum, board_type;
   static int    dataIdGM=0, dataIdGA=0, dataIdRun=0;
@@ -198,7 +198,7 @@ int eventbuild(FILE *f_in, MJDetInfo *Dets, MJRunInfo *runInfo) {
   static int    totevts, badevts, subthreshevts, out_evts, veto_evts, built_evts, recordID;
 
   long long int time=0, time2=0, time3, min_time = -1, prev_ch_time=0;
-  int           min_time_board=-1, istep1, istep2, step, step2, siglen;
+  int           min_time_board=-1, istep1, istep2, step, step2, siglen = 2018;
   static int    ntOutOfOrder = 0, oldCrate=0;
   static int    veto_count, veto_count2, sub_veto_count, veto_error_count=0;
   static int    start_time, start_time_veto, start_time_Ge;
@@ -743,8 +743,6 @@ int eventbuild(FILE *f_in, MJDetInfo *Dets, MJRunInfo *runInfo) {
         else if (board_type == dataIdGA) {
           prev_ch_time = evtdat[5];
           prev_ch_time = (prev_ch_time << 16) + (evtdat[4] >> 16);
-          e_onbd = (((evtdat[9] & 0xffff) << 8) + (evtdat[8] >> 24) -
-                    (evtdat[8] & 0xffffff));
           siglen = 2*evlen - 32;
 
           if ((k = presum[chan]) > 1) {  // presumming with factor k = presum[chan] // TEMPORARY 0

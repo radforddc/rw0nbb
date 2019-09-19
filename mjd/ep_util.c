@@ -853,7 +853,8 @@ double get_CTC_energy(float *fsignal, int len, int chan, MJDetInfo *Dets, PSAinf
 
   /* find time-related value for trapping correction */
   s = float_trap_fixed(fsignal, *t0-210, 200, 10)/200.0;  // FIXME?? increase 200 to TRAP_RISE?
-  *drift = (0.7 * *e_raw - s) / 1000.0;   // drift time * charge for use in charge-trapping correction
+  *drift = (0.7 * *e_raw - s) / 1000.0;   // drift time * charge for use in charge-trapping correction,
+                                          // with some offset to get average near zero
 
   /* do optimum charge-trapping correction */
   *e_adc = *e_raw + *drift * ctc_factor;
@@ -1418,7 +1419,8 @@ int data_clean(short *signal, int chan, DataClean *dcInfo) {
     s2 /= 3.0;
     sl /= 3;        // 0.06 ADC units
   }
-  if (signal[1500] > 4800 && signal[1500] < 5150 &&
+  if (DEBUG &&
+      signal[1500] > 4800 && signal[1500] < 5150 &&
       (chan == 23 || chan == 27 || chan == 51) &&
       (sl < dcInfo->blsl_lo[chan] || sl > dcInfo->blsl_hi[chan]))
     printf("++++ chan %2d  sl = %d  h = %d\n", chan, sl, signal[1500]);

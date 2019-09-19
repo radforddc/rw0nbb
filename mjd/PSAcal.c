@@ -163,7 +163,7 @@ int main(int argc, char **argv) {
     char fname[64];
     sprintf(fname, "PSA_ch%3.3d_2d.dat", CHAN_2D);
     f_out_2d = fopen(fname, "w");
-    fprintf(f_out_2d, "#chan    E_ctc     A/E    A/E_raw    DT   DT_corr  lamda  t90-100\n");
+    fprintf(f_out_2d, "#chan    E_ctc     A/E    A/E_raw    DT   DT_corr  DCR   lamda  t90-100\n");
   }
 
   // end of initialization
@@ -270,10 +270,10 @@ int main(int argc, char **argv) {
         if ((j = aovere_norm + 0.5) < 2000 && j > 0) his[chan][6000+j]++;
 
         // make file for 2D plots  of A/E|E|CTC
-        if (f_out_2d && chan == CHAN_2D && e_ctc >= roi_elo && e_ctc <= roi_elo+700)
-          fprintf(f_out_2d, "%4d %9.3f %8.2f %8.2f %7.2f %7.2f %7.2f %6d\n",
+        if (f_out_2d && chan == CHAN_2D && e_ctc >= roi_elo)// && e_ctc <= roi_elo+700)
+          fprintf(f_out_2d, "%4d %9.3f %8.2f %8.2f %7.2f %7.2f %7.2f %7.2f %6d\n",
                   chan, e_ctc, aovere_norm, aovere * 800.0/a_e_pos[chan], drift, dtc,
-                  sd[isd]->lamda/1.3, sd[isd]->t100 - sd[isd]->t90);
+                  sd[isd]->dcr, sd[isd]->lamda/1.3, sd[isd]->t100 - sd[isd]->t90);
       }
 
       /* find and test A/E cut */
@@ -536,9 +536,9 @@ int main(int argc, char **argv) {
         PSA.ae_pos[chan] *= (1.0 + (s2/(s2-s3) + (float) k)/800);
         printf("chan %3d |  k, s2 = %3d %6.3f -> %3d %6.3f;  pos adjustment = %6.2f\n",
                chan, k+1, s3, k, s2, s2/(s2-s3) + (float) k);
-      }
-      if (keep_ae_cut) {
-        PSA.ae_cut[chan] += PSA.ae_pos[chan] - keep_pos[chan];
+        if (keep_ae_cut) {
+          PSA.ae_cut[chan] += PSA.ae_pos[chan] - keep_pos[chan];
+        }
       }
     }
 
@@ -625,7 +625,7 @@ int main(int argc, char **argv) {
       // re-calculate and report cut acceptance values
       fp = fopen("aoe_eff.txt", "w");
       fprintf(fp, "#chan  SEP   err    DEP   err   Continuum err\n");
-      double s6=0, s7=0, s8=0, s9=0;
+      double s5 = 0, s6=0, s7=0, s8=0, s9=0;
       double s0, e0, e1, e2, e3, e4, e5;
       for (chan = 0; chan < 100; chan++) {  // HG channels ony!
         if (chan%100 >= runInfo.nGe) continue;
