@@ -1,0 +1,61 @@
+
+To analyze a data subset:
+
+1. Make a .lis file containing the names of the run files to be included in the subset
+  - In the directory with the run files, do
+    $ ls -1 * > dir.lis  [ makes a files dir.lis that conatins all of the run files in the directory ]
+    $ rundiff2 <first_run_number> <last_run_number> dir.lis  [ where the run number parameters are the first
+                                                               and last runs that you want to include.
+                                                               Creates at least one new .lis file listing the
+                                                               runs where the DAQ settings are not changed.]
+  - Check the DS*.lis files created to make sure everything makes sense.
+    If you want to combine some .lis files, you can cat them together.
+
+  - Run pulser_tag_init to create a default.pdt file. It is best to do this using a background run. So if your
+    data subset is a calibration run, choose a background run just prior to or just following the calibration
+    $ pulser_tag_init <run_file_name_xxxx>   [ where xxx is your selected bg run ]
+    $ mv runxxxx.pdt default.pdt
+
+  - Once you have a DS*.lis file for your data subset, and a default.pdt, do:
+    $ presort DSyyyy.lis   [ where yyyy is the first run number of your data subset. This makes a
+                             DSyyyy presorted data file, and an associated .dcl data cleaning limits file. ]
+  - Before running presort, you can also create a thresholds.input file to exclude low-energy events.
+    This can save a lot of disk space and processing time if youre not interested in lower energies.
+    Example thresholds.input contents:
+
+#--------- low-threshold example: ------------
+# ch-lo ch-hi HG-thresold  [LG-threshold = HG-threshold/2]
+ 1 45  8
+16 16  6
+46 68 30
+48 48 40
+#--------- high-threshold example: -----------
+# ch-lo ch-hi HG-thresold  [LG-threshold = HG-threshold/2]
+ 1 57 3000
+#---------------------
+
+  - Once you have your presorted DS* file, you have several options to proceed.
+  
+  - For a calibration data subset, you want to use it to auto-tune the:
+        - pole-zero parameters                          (PZ.input)
+        - charge-trapping-correction parameters         (ctc.input)
+        - pulse-shape-analysis (A/E and DCR) parameters (psa.input)
+        - energy calibrations                           (gains.input)
+    I suggest you include a previous version of a PZ.input file and a gains.input file to give good starting values.
+  - The easiest way to proceed is to use the Makefile included in test_mjd.
+    Copy the Makefile to your working directory, and edit the line defining $(HOME) to point to the executables, then
+    $ ln -s DSyyyy Data
+    $ make
+  - Alternatively, you can execute the commands in the Makefile by hand:
+    $ PZcal DSyyyy
+    $ mv PZ.output PZ.input
+    $ skim DSyyyy
+    $ CTcal skim.dat
+    $ mv ctc.output ctc.input; mv gains.output gains.input
+    $ PSAcal skim.dat
+    $ mv psa.output psa.input
+    
+  - For a background data subset, copy the appropriate PZ.input, ctc.input, gains.input, and psa.input
+    from the most appropriate calibration run into the working directory. Make sure you have the .dcl file
+    created by presort there, also. Then:
+    $ sortrun DSyyyy

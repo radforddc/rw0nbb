@@ -139,19 +139,20 @@ void signalselect(FILE *f_in, MJDetInfo *Dets, MJRunInfo *runInfo) {
   if (!f_out) {
     if (ep_init(Dets, runInfo, module_lu, det_lu, chan_lu) < 0) return;
 
-    while (argn < runInfo->argc && runInfo->argv[argn][0] == '-') {
-      if (strstr(runInfo->argv[argn], "n")) subbl = 0;
-      if (strstr(runInfo->argv[argn], "z")) norm  = 1;
-      if (strstr(runInfo->argv[argn], "a")) align = 1;
-      if (strstr(runInfo->argv[argn], "k")) kev   = 1;
-      if (strstr(runInfo->argv[argn], "K")) kev   = 2;
-      if (strstr(runInfo->argv[argn], "p")) doPZ  = 1;
-      if (strstr(runInfo->argv[argn], "d")) deriv = 1;
-      if (strstr(runInfo->argv[argn], "t") &&
-          (f_ts = fopen("ts.input", "r"))) ts_sel = 1;
-      argn++;
+    for (argn = 1; argn < runInfo->argc; argn++) {
+      if (runInfo->argv[argn][0] == '-') {
+        if (strstr(runInfo->argv[argn], "n")) subbl = 0;
+        if (strstr(runInfo->argv[argn], "z")) norm  = 1;
+        if (strstr(runInfo->argv[argn], "a")) align = 1;
+        if (strstr(runInfo->argv[argn], "k")) kev   = 1;
+        if (strstr(runInfo->argv[argn], "K")) kev   = 2;
+        if (strstr(runInfo->argv[argn], "p")) doPZ  = 1;
+        if (strstr(runInfo->argv[argn], "d")) deriv = 1;
+        if (strstr(runInfo->argv[argn], "t") &&
+            (f_ts = fopen("ts.input", "r"))) ts_sel = 1;
+      }
     }
-    argn++;
+    argn = 2;
     clo = atoi(runInfo->argv[argn++]);
     chi = atoi(runInfo->argv[argn++]);
     elo = atoi(runInfo->argv[argn++]);

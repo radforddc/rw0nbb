@@ -51,7 +51,7 @@ int main(int argc, char **argv) {
   float  pos, area, fwhm;
   int    i, j, k, n, roi_elo;
   int    *his[HIS_COUNT];
-  FILE   *f_out, *f_out_2d;
+  FILE   *f_out, *f_out_2d = NULL;
 
 
   /* initialize */
@@ -259,7 +259,6 @@ int main(int argc, char **argv) {
           if (chan%100 >= runInfo.nGe) continue;
           j = k = n = 0;
           float f1 = 999;
-          float f2 = 0;
           for (j=0; j<40; j++) {
             fwhm = 5;
             if ((pos = autopeak3(his[spnum+chan], 200*j, 200+200*j, &area, &fwhm)) &&
@@ -267,7 +266,6 @@ int main(int argc, char **argv) {
               f1 = fwhm;
               k = area;
               n = j;
-              f2 = pos;
             }
           }
           if (k > 99) {

@@ -1110,7 +1110,7 @@ int decode_runfile_header(FILE *f_in, MJDetInfo *DetsReturn, MJRunInfo *runInfo)
       }
       /* ---------- */
 
-      printf("  ACKK! Controller card %d has no matching pulser tag!\n\n", j);
+      printf(" Error: Controller card %d has no matching pulser tag!\n", j);
     }
   }
     
@@ -1127,7 +1127,7 @@ int decode_runfile_header(FILE *f_in, MJDetInfo *DetsReturn, MJRunInfo *runInfo)
         break;
       }
     }
-    // GRETINA digitizer values
+   // GRETINA digitizer values
     for (j=0; j<nGeDig; j++) {
       if (MJMDets[i].crate == GeDig[j].crate &&
           MJMDets[i].slot  == GeDig[j].slot) {
@@ -1167,6 +1167,21 @@ int decode_runfile_header(FILE *f_in, MJDetInfo *DetsReturn, MJRunInfo *runInfo)
         }
         break;
       }
+    }
+    if (j >= nGeDig) {
+      printf(" Error: Detector %d has no associated digitizer!"
+             "   Crate, slot = %d %d\n", i, MJMDets[i].crate, MJMDets[i].slot);
+      MJMDets[i].type            = 0;
+      MJMDets[i].HGChEnabled     = MJMDets[i].LGChEnabled     = 0;
+      MJMDets[i].HGLEDThreshold  = MJMDets[i].LGLEDThreshold  = 0;
+      MJMDets[i].HGPreSumEnabled = MJMDets[i].LGPreSumEnabled = 0;
+      MJMDets[i].HGPostrecnt     = MJMDets[i].LGPostrecnt     = 0;
+      MJMDets[i].HGPrerecnt      = MJMDets[i].LGPrerecnt      = 0;
+      MJMDets[i].HGTrigPolarity  = MJMDets[i].LGTrigPolarity  = 0;
+      MJMDets[i].HGTrigMode      = MJMDets[i].LGTrigMode      = 0;
+      MJMDets[i].HGLEDThreshold  = MJMDets[i].LGLEDThreshold  = 0;
+      MJMDets[i].HGTrapThreshold = MJMDets[i].LGTrapThreshold = 0;
+      MJMDets[i].HGTrapEnabled   = MJMDets[i].LGTrapEnabled   = 0;
     }
     // Controller card values
     for (j=0; j<nGeCC; j++) {
