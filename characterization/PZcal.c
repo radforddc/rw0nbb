@@ -72,16 +72,18 @@ void signalselect(FILE *f_in, MJDetInfo *Dets, MJRunInfo *runInfo, int step) {
   static int chan_lu[NBDS][16];         // lookup table to map module&chan into parameter IDs
 
   unsigned int head[2], evtdat[20000];
-  short  *signal, sigu[2048];
+  short  *signal, sigu[8192], siguc[8192];
   float  fsignal[8192] = {0};
 
   int    i, j, k, chan, sig_len;
   FILE   *f_out;
   int    t90, t100, bl;
-  static int *his[HIS_COUNT];
-  static int clo=0, chi, elo=3000, ehi=7200;
-  static PZinfo PZI;
   float  pos, area, fwhm;
+
+  static int    *his[HIS_COUNT];
+  static int    clo=0, chi, elo=3000, ehi=7200;
+  static int    presum[200] = {0};     // expected presum step (or zero for no presum)
+  static PZinfo PZI;
 
   /*
     step = 1 to get baseline mode
@@ -118,6 +120,61 @@ void signalselect(FILE *f_in, MJDetInfo *Dets, MJRunInfo *runInfo, int step) {
     if (runInfo->argc > 5) ehi = atoi(runInfo->argv[6]);
     if (clo < 0) clo = 0;
     if (chi > 100+runInfo->nGe) chi = 100+runInfo->nGe;
+
+    /* decide if there is presumming; if so, then we also need to
+       make sure we have the space to hold expanded signals */
+    k = 2008;
+    int chan_k = -1;
+    for (chan = 0; chan < runInfo->nGe; chan++) {
+      // HG channels
+      if (Dets[chan].type == 0 && Dets[chan].HGChEnabled &&           // GRETINA4M type
+          (Dets[chan].HGPostrecnt + Dets[chan].HGPrerecnt) < 2008) {
+        presum[chan] = Dets[chan].HGPostrecnt + Dets[chan].HGPrerecnt;
+        if (k > presum[chan]) {
+          k = presum[chan];
+          chan_k = chan;
+        }
+      }
+      if (Dets[chan].type == 1 && Dets[chan].HGPreSumEnabled) {       // GRETINA4A type
+        presum[chan] = 1 << Dets[chan].HGdecimationFactor;
+        k = 1111;
+        chan_k = chan;
+      }
+      if (VERBOSE && presum[chan] > 0)
+        printf("chan, type, presum = %d %d %d\n", chan, Dets[chan].type, presum[chan]);
+
+      // LG channels
+      if (Dets[chan].type == 0 && Dets[chan].LGChEnabled &&           // GRETINA4M type
+          (Dets[chan].LGPostrecnt + Dets[chan].LGPrerecnt) < 2008) {
+        presum[100+chan] = Dets[chan].LGPostrecnt + Dets[chan].LGPrerecnt;
+        if (k > presum[100+chan]) {
+          k = presum[100+chan];
+          chan_k = 100+chan;
+        }
+      }
+      if (Dets[chan].type == 1 && Dets[chan].LGPreSumEnabled) {       // GRETINA4A type
+        presum[100+chan] = 1 << Dets[chan].LGdecimationFactor;
+        k = 1111;
+        chan_k = 100+chan;
+      }
+      if (VERBOSE && presum[100+chan] > 0)
+        printf("chan, type, presum = %d %d %d\n", 100+chan, Dets[chan].type, presum[100+chan]);
+    }
+    if (k < 2008 && k > 1000) {  // yes, at least one channel has presumming enabled
+      printf("   Presumming: At least one channel has PS start at or after sample %d\n", k);
+      if (k == 1111) { // GRETINA4A type, x16 expansion
+        k = presum[chan_k]*2048;   // TEST TEMPORARY
+      } else {
+        k = 2048 + (2018-k)*3;     // max expanded signal length
+      }
+      if (k > 8192) {
+        printf("ERROR: Expanded signals will be longer than 8192 samples! Code edit required!\n");
+        exit(-1);
+      }
+    } else {
+      printf("No presumming\n");
+    }
+
   }
   printf("\nChs %d to %d, e_trapmax %d to %d\n\n", clo, chi, elo, ehi);
 
@@ -170,6 +227,7 @@ void signalselect(FILE *f_in, MJDetInfo *Dets, MJRunInfo *runInfo, int step) {
     long long int time = (evtdat[3] & 0xffff);
     time = time << 32 | evtdat[2];
     if (time < 0) continue;
+    sig_len = 2008;
 
     int ch = (evtdat[1] & 0xf);
     if ((j = module_lu[crate][slot]) >= 0 && ch < 10) {
@@ -180,6 +238,41 @@ void signalselect(FILE *f_in, MJDetInfo *Dets, MJRunInfo *runInfo, int step) {
           2020 == decompress_signal((unsigned short *)signal, sigu, 2*(evlen - 2) - 28)) {
         signal = sigu;
         evlen = 1026;
+      }
+
+      /* deal with presumming of signal */
+      if (presum[chan] > 0) {   // need to correct for presumming
+        // FIXME: replace hard-coded factor of 4 with data from header
+        int sstep = presum[chan];
+        int cts = (signal[sstep-5] + signal[sstep-4] + signal[sstep-3] + signal[sstep-2])/4;
+        if (cts > 10 || cts < -10) {
+          /* --- Find transition to 4x presumming ------- */
+          for (sstep=presum[chan]; sstep<presum[chan]+2; sstep++) {
+            if (cts > 0 && signal[sstep] > 2*cts) break;
+            if (cts < 0 && signal[sstep] < 2*cts) break;
+          }
+          if (sstep == presum[chan]+2) {
+            printf("Hmmm... step not found in %d - %d in chan %3d, counts %5d; discarding event\n",
+                   sstep-1, sstep, chan, cts);
+            continue;
+          } else if (VERBOSE) {
+            printf("step found at %d in chan %3d\n", sstep, chan);
+          }
+        }
+        /* --- uncompress presumming --- */
+        for (i=0; i<sstep; i++) siguc[i] = signal[i];
+        for (i=sstep; i<sig_len; i++) {                   // NOTE: This is wrong for signal < 0
+          for (j=0; j<4; j++)
+            siguc[sstep + 4*(i-sstep) + j] = signal[i]/4; // distribute sums over 4 bins each
+          for (j=0; j<signal[i]%4; j++)
+            siguc[sstep + 4*(i-sstep) + j]++;             // and make sure sum is right
+        }
+        sig_len += 3*(sig_len-sstep);
+        signal = siguc;
+        /* --- Done with 4x presumming ------- */
+        if (VERBOSE)
+          printf("Corrected chan %d for presumming at step %d, sig_len = %d\n",
+                 chan, sstep, sig_len);
       }
 
       int e = trap_max(signal, &j, TRAP_RISE, TRAP_FLAT)/TRAP_RISE;
@@ -212,7 +305,7 @@ void signalselect(FILE *f_in, MJDetInfo *Dets, MJRunInfo *runInfo, int step) {
       }
 
       /* ---------------------- process selected signals ---------------------- */
-      sig_len = 2008;
+      if (sig_len > 2500) sig_len = 2500;   // FIXME
 
       if (step == 1) {
         /* just get mean and RMS for baseline value */
@@ -246,7 +339,6 @@ void signalselect(FILE *f_in, MJDetInfo *Dets, MJRunInfo *runInfo, int step) {
         if ((signal[t90]-bl) <= (signal[t100] - bl)*19/20) break;
       his[200+chan][2000 + t90]++;
       his[200+chan][4000 + t100-t90]++;
-      if (t100 > 1240) continue;  // FIXME
 
       /* do (optional) INL  correction */
       if (DO_INL) {
@@ -259,8 +351,8 @@ void signalselect(FILE *f_in, MJDetInfo *Dets, MJRunInfo *runInfo, int step) {
       /* do fitting of pole-zero parameters (decay time and fraction_2) */
 
       float chisq, lamda1, frac2, lamda;
-      int   tlo = t100+50, thi = 1990;  // FIXME; variable length
-      // if (thi > tlo + 700) thi = tlo + 700;  // FIXME; check performance
+      int   tlo = t100+50, thi = sig_len - 10;
+      if (thi > tlo + 1500) thi = tlo + 1500;   // FIXME; check performance
 
       chisq = pz_fitter(fsignal, tlo, thi, chan, &PZI, &lamda1, &frac2, &lamda);
       if (chisq > 0.01) {       // fit successful

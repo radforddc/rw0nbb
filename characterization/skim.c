@@ -55,12 +55,13 @@ int main(int argc, char **argv) {
   int module_lu[NCRATES+1][21];  // lookup table to map VME crate&slot into module IDs
   int det_lu[NBDS][16];          // lookup table to map module&chan into detector IDs
   int chan_lu[NBDS][16];         // lookup table to map module&chan into parameter IDs
+  int presum[200] = {0};         // expected presum step (or zero for no presum)
   PZinfo  PZI;
   CTCinfo CTC;
   PSAinfo PSA;
 
   unsigned int head[2], evtdat[20000];
-  short  *signal, sigu[2048];
+  short  *signal, sigu[8192], siguc[8192];
   float  fsignal[8192] = {0};
 
   // data used, stored, and reused in the different steps
@@ -117,6 +118,61 @@ int main(int argc, char **argv) {
 
   printf("\nChs %d to %d, e_trapmax %d to %d\n\n", clo, chi, elo, ehi);
 
+  /* decide if there is presumming; if so, then we also need to
+     make sure we have the space to hold expanded signals */
+  k = 2008;
+  int chan_k = -1;
+  for (chan = 0; chan < runInfo.nGe; chan++) {
+    // HG channels
+    if (Dets[chan].type == 0 && Dets[chan].HGChEnabled &&           // GRETINA4M type
+        (Dets[chan].HGPostrecnt + Dets[chan].HGPrerecnt) < 2008) {
+      presum[chan] = Dets[chan].HGPostrecnt + Dets[chan].HGPrerecnt;
+      if (k > presum[chan]) {
+        k = presum[chan];
+        chan_k = chan;
+      }
+    }
+    if (Dets[chan].type == 1 && Dets[chan].HGPreSumEnabled) {       // GRETINA4A type
+      presum[chan] = 1 << Dets[chan].HGdecimationFactor;
+      k = 1111;
+      chan_k = chan;
+    }
+    if (VERBOSE > 1 && presum[chan] > 0)
+      printf("chan, type, presum = %d %d %d\n", chan, Dets[chan].type, presum[chan]);
+
+    // LG channels
+    if (Dets[chan].type == 0 && Dets[chan].LGChEnabled &&           // GRETINA4M type
+        (Dets[chan].LGPostrecnt + Dets[chan].LGPrerecnt) < 2008) {
+      presum[100+chan] = Dets[chan].LGPostrecnt + Dets[chan].LGPrerecnt;
+      if (k > presum[100+chan]) {
+        k = presum[100+chan];
+        chan_k = 100+chan;
+      }
+    }
+    if (Dets[chan].type == 1 && Dets[chan].LGPreSumEnabled) {       // GRETINA4A type
+      presum[100+chan] = 1 << Dets[chan].LGdecimationFactor;
+      k = 1111;
+      chan_k = 100+chan;
+    }
+    if (VERBOSE > 1 && presum[100+chan] > 0)
+      printf("chan, type, presum = %d %d %d\n", 100+chan, Dets[chan].type, presum[100+chan]);
+  }
+  if (k < 2008 && k > 1000) {  // yes, at least one channel has presumming enabled
+    printf("   Presumming: At least one channel has PS start at or after sample %d\n", k);
+    if (k == 1111) { // GRETINA4A type, x16 expansion
+      k = presum[chan_k]*2048;   // TEST TEMPORARY
+    } else {
+      k = 2048 + (2018-k)*3;     // max expanded signal length
+    }
+    if (k > 8192) {
+      printf("ERROR: Expanded signals will be longer than 8192 samples! Code edit required!\n");
+      exit(-1);
+    }
+  } else {
+    printf("No presumming\n");
+  }
+
+
   // end of initialization
   // start loop over reading events from input file
 
@@ -166,6 +222,7 @@ int main(int argc, char **argv) {
     long long int time = (evtdat[3] & 0xffff);
     time = time << 32 | evtdat[2];
     if (time < 0) continue;
+    int sig_len = 2008;
 
     int ch = (evtdat[1] & 0xf);
     if ((j = module_lu[crate][slot]) >= 0 && ch < 10) {
@@ -176,6 +233,41 @@ int main(int argc, char **argv) {
           2020 == decompress_signal((unsigned short *)signal, sigu, 2*(evlen - 2) - 28)) {
         signal = sigu;
         evlen = 1026;
+      }
+
+      /* deal with presumming of signal */
+      if (presum[chan] > 0) {   // need to correct for presumming
+        // FIXME: replace hard-coded factor of 4 with data from header
+        int step = presum[chan];
+        int cts = (signal[step-5] + signal[step-4] + signal[step-3] + signal[step-2])/4;
+        if (cts > 10 || cts < -10) {
+          /* --- Find transition to 4x presumming ------- */
+          for (step=presum[chan]; step<presum[chan]+2; step++) {
+            if (cts > 0 && signal[step] > 2*cts) break;
+            if (cts < 0 && signal[step] < 2*cts) break;
+          }
+          if (step == presum[chan]+2) {
+            printf("Hmmm... step not found in %d - %d in chan %3d, counts %5d; discarding event\n",
+                   step-1, step, chan, cts);
+            continue;
+          } else if (VERBOSE > 1) {
+            printf("step found at %d in chan %3d\n", step, chan);
+          }
+        }
+        /* --- uncompress presumming --- */
+        for (i=0; i<step; i++) siguc[i] = signal[i];
+        for (i=step; i<sig_len; i++) {                   // NOTE: This is wrong for signal < 0
+          for (j=0; j<4; j++)
+            siguc[step + 4*(i-step) + j] = signal[i]/4; // distribute sums over 4 bins each
+          for (j=0; j<signal[i]%4; j++)
+            siguc[step + 4*(i-step) + j]++;             // and make sure sum is right
+        }
+        sig_len += 3*(sig_len-step);
+        signal = siguc;
+        /* --- Done with 4x presumming ------- */
+        if (VERBOSE > 1)
+          printf("Corrected chan %d for presumming at step %d, sig_len = %d\n",
+                 chan, step, sig_len);
       }
 
       int e = trap_max(signal, &j, TRAP_RISE, TRAP_FLAT)/TRAP_RISE;
@@ -207,7 +299,7 @@ int main(int argc, char **argv) {
         }
       }
 
-      int sig_len = 2008;
+      if (sig_len > 2500) sig_len = 2500;   // FIXME
 
       /* ---------------------- process selected signals ---------------------- */
       
@@ -237,8 +329,8 @@ int main(int argc, char **argv) {
       /* do fitting of pole-zero parameters to get lamda (~ DCR) */
 
       float chisq, lamda1, frac2;
-      int tlo = t100+50, thi = 1990;  // FIXME; variable length
-      // if (thi > tlo + 700) thi = tlo + 700;  // FIXME; check performance
+      int   tlo = t100+50, thi = sig_len - 10;
+      if (thi > tlo + 1500) thi = tlo + 1500;  // FIXME; check performance
       chisq = pz_fitter(fsignal, tlo, thi, chan, &PZI, &lamda1, &frac2, &lamda);
       if (chisq < 0.01 || chisq > 10.0) continue;            // fit failed, or bad fit chisq
       lamda = (0.01 / PZI.tau[chan] - lamda) * 1.5e6 + 0.3;  // 0.3 fudge to get mean ~ 0
@@ -293,7 +385,21 @@ int main(int argc, char **argv) {
       /* ---- end of GERDA-style A/E ---- */
 
       /* get DCR from slope of PZ-corrected signal tail */
-      dcr = float_trap_fixed(fsignal, t90+50, 100, 500) / 25.0;
+      if (sig_len < 2450) {
+        if (t90 + 760 > sig_len) {
+          if (VERBOSE)
+            printf("Error getting DCR in skim.c: t90 = %d, sig_len = %d\n", t90, sig_len);
+          continue;
+        }
+        dcr = float_trap_fixed(fsignal, t90+50, 100, 500) / 25.0;
+      } else {
+        if (t90 + 1180 > sig_len) {
+          if (VERBOSE)
+            printf("Error getting DCR in skim.c: t90 = %d, sig_len = %d\n", t90, sig_len);
+          continue;
+        }
+        dcr = float_trap_fixed(fsignal, t90+50, 160, 800) / 40.0;
+      }
 
       // save data for skim file
       sd[isd]->chan     = chan;

@@ -662,8 +662,8 @@ int eventprocess(MJDetInfo *Dets, MJRunInfo *runInfo, int nChData, BdEvent *ChDa
       for (t90 = t100-1; t90 > 500; t90--)
         if ((signal[t90] - bl) <= (signal[t100] - bl)*19/20) break;
 
-      if (t100   > 1300 ||   // important for cleaning, gets rid of pileup
-          t90+50 > 1300) {   // dcr trap extends past end of signal
+      if (t100   > 1300 ||      // important for cleaning, gets rid of pileup
+          t90+760 > siglen) {   // dcr trap extends past end of signal
         if (VERBOSE || DEBUG)
           printf(">>> Error: chan %d signal at timestamp %lld is too late!\n", chan, time);
         dirty_sig += 64;  // FIXME; this is too late to be processed
@@ -684,8 +684,8 @@ int eventprocess(MJDetInfo *Dets, MJRunInfo *runInfo, int nChData, BdEvent *ChDa
       /* do fitting of pole-zero parameters to get lamda (~ DCR) */
 
       float chisq, lamda1, frac2;
-      int tlo = t100+50, thi = 1990;            // FIXME; variable length
-      // if (thi > tlo + 700) thi = tlo + 700;  // FIXME; check performance
+      int   tlo = t100+50, thi = siglen - 10;
+      if (thi > tlo + 1500) thi = tlo + 1500;  // FIXME; check performance
       chisq = pz_fitter(fsignal, tlo, thi, chan, &PZI, &lamda1, &frac2, &lamda);
       if (chisq < 0.01 || chisq > 50.0) {       // fit failed, or bad fit chisq
         dirty_sig += 128;  // FIXME; this is too late to be processed
@@ -752,7 +752,11 @@ int eventprocess(MJDetInfo *Dets, MJRunInfo *runInfo, int nChData, BdEvent *ChDa
       /* ---- end of GERDA-style A/E ---- */
           
       /* get DCR from slope of PZ-corrected signal tail */
-      dcr = float_trap_fixed(fsignal, t90+50, 100, 500) / 25.0;
+      if (siglen < 2450) {
+        dcr = float_trap_fixed(fsignal, t90+50, 100, 500) / 25.0;
+      } else {
+        dcr = float_trap_fixed(fsignal, t90+50, 160, 800) / 40.0;
+      }
 
       /* do drift-time and energy corrections to A/E, DCR, lamda */
       float dtc = drift*3.0*2614.0/e_adc;   // in (x)us, for DT- correction to A/E

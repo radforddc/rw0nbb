@@ -419,8 +419,8 @@ int eventbuild(FILE *f_in, MJDetInfo *Dets, MJRunInfo *runInfo) {
           }
           if (chan >= 100 && chan < 100 + runInfo->nGe) {
             if (Dets[chan-100].type == 0 &&
-                (Dets[chan-100].HGPostrecnt + Dets[chan-100].HGPrerecnt) < 2008) {
-              presum[chan] = Dets[chan-100].HGPostrecnt + Dets[chan-100].HGPrerecnt;
+                (Dets[chan-100].LGPostrecnt + Dets[chan-100].LGPrerecnt) < 2008) {
+              presum[chan] = Dets[chan-100].LGPostrecnt + Dets[chan-100].LGPrerecnt;
               if (k > presum[chan]) {
                 k = presum[chan];
                 chan_k = chan;

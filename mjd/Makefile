@@ -2,7 +2,7 @@
 
 CC = gcc
 CPP = g++
-CFLAGS = -O3 -Wall -std=c99
+CFLAGS = -O3 -Wall -std=gnu99
 RM = rm -f
 
 # common files and headers

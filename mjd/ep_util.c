@@ -642,7 +642,7 @@ int inl_correct(MJDetInfo *Dets, MJRunInfo *runInfo,
 /* ---------------------------------------- */
 
 float float_trap_fixed(float *signal, int t0, int rise, int flat) {
-
+  // FIXME: check against signal length
   int   i;
   float e = 0;
 
@@ -661,7 +661,7 @@ float float_trap_max(float *signal, int *tmax, int rise, int flat) {
     e += signal[i+t+rise+flat] - signal[i+t];
   emax = e;
   *tmax = t-1;
-  for (; t < 1950-2*rise-flat; t++) {
+  for (; t < 1950-2*rise-flat; t++) {  // FIXME: hard-coded signal length
     e += signal[t+2*rise+flat] - signal[t+rise+flat] - signal[t+rise] + signal[t];
     if (emax < e) {
       emax = e;
@@ -673,7 +673,7 @@ float float_trap_max(float *signal, int *tmax, int rise, int flat) {
 }
 
 float float_trap_max_range(float *signal, int *tmax, int rise, int flat, int tlo, int thi) {
-
+   // FIXME: check against signal length
   int   i, t;
   float e = 0, emax;
 
@@ -696,7 +696,7 @@ float float_trap_max_range(float *signal, int *tmax, int rise, int flat, int tlo
 }
 
 int trap_fixed(short *signal, int t0, int rise, int flat) {
-
+  // FIXME: check against signal length
   int i, e = 0;
 
   for (i=0; i<rise; i++)
@@ -713,7 +713,7 @@ int trap_max(short *signal, int *tmax, int rise, int flat) {
     e += signal[i+t+rise+flat] - signal[i+t];
   emax = e;
   *tmax = t;
-  for (; t < 1950-2*rise-flat; t++) {
+  for (; t < 1950-2*rise-flat; t++) {  // FIXME: hard-coded signal length
     e += signal[t+2*rise+flat] - signal[t+rise+flat] - signal[t+rise] + signal[t];
     if (emax < e) {
       emax = e;
@@ -725,7 +725,7 @@ int trap_max(short *signal, int *tmax, int rise, int flat) {
 }
 
 int trap_max_range(short *signal, int *tmax, int rise, int flat, int tlo, int thi) {
-
+  // FIXME: check against signal length
   int i, e = 0, emax, t;
 
   t = tlo;

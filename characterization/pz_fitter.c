@@ -15,7 +15,7 @@
  */
 
 #define NP 3
-#define TRACE_LEN 2000
+#define TRACE_LEN 3000
 #define VERB 0
 
 int eval(float *pars, float *sig, int tlo, int thi, float *fit, float deriv[NP][TRACE_LEN]);
@@ -37,6 +37,11 @@ float pz_fitter(float *sig, int tlo, int thi, int chan, PZinfo *PZI,
 
   *lamda1 = *frac2 = *lamda = 0;
   if (thi - tlo < 400) return 0.0f;
+  if (thi >= TRACE_LEN) {
+    printf("ERROR in pz_fitter: thi = %d is greater than TRACE_LEN = %d\n",
+           thi, TRACE_LEN);
+    return 0.0f;
+  }
 
   /*
    *  two or three fitted parameters:
