@@ -335,7 +335,7 @@ void signalselect(FILE *f_in, MJDetInfo *Dets, MJRunInfo *runInfo, int step) {
       for (i=300; i<400; i++) bl += signal[i];
       bl /= 100;
       if ((bl - PZI.baseline[chan]) < -10 || (bl - PZI.baseline[chan]) > 50) continue;   // a little data cleaning
-      for (t90 = t100-1; t90 > 900; t90--)
+      for (t90 = t100-1; t90 > 500; t90--)
         if ((signal[t90]-bl) <= (signal[t100] - bl)*19/20) break;
       his[200+chan][2000 + t90]++;
       his[200+chan][4000 + t100-t90]++;

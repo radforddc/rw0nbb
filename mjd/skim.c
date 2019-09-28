@@ -8,6 +8,7 @@
 #define VERBOSE 1
 #define E_THRESH  1500  // threshold in keV, for speed of processing;
                         // should be less than 1550 to get DE peak for A/E
+                        // can be over-ridden by specifying elo != 3000
 
 /*  ------------------------------------------------------------ */
 
@@ -353,7 +354,7 @@ int main(int argc, char **argv) {
         continue;
       }
 
-      if (E_THRESH > 0 && e_ctc < E_THRESH) continue;
+      if (elo == 3000 && (E_THRESH > 0 && e_ctc < E_THRESH)) continue;
 
       /* find A/E */
       if (e_ctc > 50 && t0 > 600 && t0 < 1300) {

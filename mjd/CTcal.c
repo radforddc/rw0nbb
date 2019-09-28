@@ -37,7 +37,7 @@ int main(int argc, char **argv) {
 
 /* ---------------------------------------------------- */
 
-  int clo=0, chi, elo=3000, ehi=7200;
+  int clo=0, chi=199, elo=1, ehi=16000;
   CTCinfo CTC;
 
   // skim data
@@ -51,6 +51,7 @@ int main(int argc, char **argv) {
   float  pos, area, fwhm;
   int    i, j, k, n, roi_elo;
   int    *his[HIS_COUNT];
+  float  his2[16384]={0};
   FILE   *f_out, *f_out_2d = NULL;
 
 
@@ -64,8 +65,6 @@ int main(int argc, char **argv) {
 
   // see if channel and energy limits are defined in the command line
   chi=100+runInfo.nGe-1;
-  elo = 3000;
-  ehi = 7200;
   if (runInfo.argc > 2) clo = atoi(runInfo.argv[2]);
   if (runInfo.argc > 3) chi = atoi(runInfo.argv[3]);
   if (runInfo.argc > 4) elo = atoi(runInfo.argv[4]);
@@ -127,6 +126,8 @@ int main(int argc, char **argv) {
       e_raw  = sd[isd]->e;
       drift  = sd[isd]->drift;
       lamda  = sd[isd]->lamda;
+      if (chan < 100 && (e_raw < elo || e_raw > ehi)) continue;
+      if (chan > 99 && (e_raw < elo/3.4 || e_raw > ehi/3.2)) continue;
 
       // histogram raw energy in [ADC] units
       if (step == 1) {
@@ -174,6 +175,7 @@ int main(int argc, char **argv) {
       }
       if (step == 4 && e_ctc < 4090 && e_lamda < 4090) {
         his[1000+chan][(int) (2.0*e_ctc + 0.5)]++;
+        if (e_ctc < 16380/5) his2[(int) (5.0*e_ctc + 0.5)]++;
         his[1200+chan][(int) (2.0*e_lamda + 0.5)]++;
         if (CTC.best_dt_lamda[chan]) {
           his[1400+chan][(int) (2.0*e_lamda + 0.5)]++;
@@ -184,7 +186,7 @@ int main(int argc, char **argv) {
         if (e_ctc > 2500 && e_ctc < 2750) his[2000+chan][(int) (4.0*(e_ctc-1307.25) + 0.5)]++;
       }
       // make file for 2D plots  of E vs CTC
-      roi_elo =  2574;
+      roi_elo = CAL_E - 40.0;
       if (f_out_2d && step == 4 && chan == CHAN_2D && e_ctc >= roi_elo && e_ctc <= roi_elo+700)
         fprintf(f_out_2d, "%4d %9.3f %8.3f  %8.3f %6.3f %10.3f %6.3f %10.2f\n",
                 chan, e_ctc, e_raw*gain, drift, drift*CTC.e_dt_slope[chan]*gain,
@@ -192,7 +194,7 @@ int main(int argc, char **argv) {
 
       /* find optimum drift-time correction for energy */
       /* energy drift-time / trapping correction... */
-      roi_elo = 2574;
+      roi_elo = CAL_E - 40.0;
       if (e_ctc >= roi_elo && e_ctc <= roi_elo+80) { // wide gate on 2614-keV peak
         if (step == 2) {
           /* try 40 options to find optimum charge-trapping correction for photopeak energy */
@@ -236,13 +238,13 @@ int main(int argc, char **argv) {
         }
         if ((pos = autopeak3(his[i], j, 7000, &area, &fwhm))) {
           if (i < 100) {
-            Dets[i].HGcalib[0] = 2614.5/pos;
-            printf(" E_raw 2615: %3d P = %7.1f A = %7.0f; FWHM = %7.2f keV\n",
-                   i, pos, area, fwhm*Dets[i].HGcalib[0]);
+            Dets[i].HGcalib[0] = CAL_E/pos;
+            printf(" E_raw %.1f: %3d P = %7.1f A = %7.0f; FWHM = %7.2f keV\n",
+                   CAL_E, i, pos, area, fwhm*Dets[i].HGcalib[0]);
           } else {
-            Dets[i-100].LGcalib[0] = 2614.5/pos;
-            printf(" E_raw 2615: %3d P = %7.1f A = %7.0f; FWHM = %7.2f keV\n",
-                   i, pos, area, fwhm*Dets[i-100].LGcalib[0]);
+            Dets[i-100].LGcalib[0] = CAL_E/pos;
+            printf(" E_raw %.1f: %3d P = %7.1f A = %7.0f; FWHM = %7.2f keV\n",
+                   CAL_E, i, pos, area, fwhm*Dets[i-100].LGcalib[0]);
           }
         }
       }
@@ -302,14 +304,14 @@ int main(int argc, char **argv) {
         if ((pos = autopeak3(his[600+chan], j, 7000, &area, &fwhm))) {
           fwhm0 = fwhm;
           if (chan < 100) {
-            Dets[chan].HGcalib[0] = 2614.5/pos;
-            printf("Ch %3d  E_ctc_adc   2615:  P = %7.1f A = %7.0f; FWHM = %7.2f keV\n",
-                   chan, pos, area, fwhm*Dets[chan].HGcalib[0]);
+            Dets[chan].HGcalib[0] = CAL_E/pos;
+            printf("Ch %3d  E_ctc_adc  %.1f:  P = %7.1f A = %7.0f; FWHM = %7.2f keV\n",
+                   chan, CAL_E, pos, area, fwhm*Dets[chan].HGcalib[0]);
             fprintf(fp, "%4d %7.3f", chan, fwhm*Dets[chan].HGcalib[0]);
           } else {
-            Dets[chan-100].LGcalib[0] = 2614.5/pos;
-            printf("Ch %3d  E_ctc_adc   2615:  P = %7.1f A = %7.0f; FWHM = %7.2f keV\n",
-                   chan, pos, area, fwhm*Dets[chan-100].LGcalib[0]);
+            Dets[chan-100].LGcalib[0] = CAL_E/pos;
+            printf("Ch %3d  E_ctc_adc  %.1f:  P = %7.1f A = %7.0f; FWHM = %7.2f keV\n",
+                   chan, pos,CAL_E,  area, fwhm*Dets[chan-100].LGcalib[0]);
             fprintf(fp, "%4d %7.3f", chan, fwhm*Dets[chan-100].LGcalib[0]);
           }
         }
@@ -324,14 +326,14 @@ int main(int argc, char **argv) {
         if ((pos = autopeak3(his[800+chan], j, 7000, &area, &fwhm))) {
           if (fwhm < fwhm0 * FWHM_RATIO) CTC.best_dt_lamda[chan] = 1;
           if (chan < 100) {
-            CTC.e_lamda_gain[chan] = 2614.5/pos/Dets[chan].HGcalib[0];
-            printf("Ch %3d  E_lamda_adc 2615:  P = %7.1f A = %7.0f; FWHM = %7.2f keV ; rel gain = %9.7lf\n",
-                   chan, pos, area, fwhm*Dets[chan].HGcalib[0]*CTC.e_lamda_gain[chan], CTC.e_lamda_gain[chan]);
+            CTC.e_lamda_gain[chan] = CAL_E/pos/Dets[chan].HGcalib[0];
+            printf("Ch %3d  E_lamda_adc %.1f:  P = %7.1f A = %7.0f; FWHM = %7.2f keV ; rel gain = %9.7lf\n",
+                   chan, CAL_E, pos, area, fwhm*Dets[chan].HGcalib[0]*CTC.e_lamda_gain[chan], CTC.e_lamda_gain[chan]);
             fprintf(fp, " %7.3f\n", fwhm*Dets[chan].HGcalib[0]*CTC.e_lamda_gain[chan]);
           } else {
-            CTC.e_lamda_gain[chan] = 2614.5/pos/Dets[chan-100].LGcalib[0];
-            printf("Ch %3d  E_lamda_adc 2615:  P = %7.1f A = %7.0f; FWHM = %7.2f keV ; rel gain = %9.7lf\n",
-                   chan, pos, area, fwhm*Dets[chan-100].LGcalib[0]*CTC.e_lamda_gain[chan], CTC.e_lamda_gain[chan]);
+            CTC.e_lamda_gain[chan] = CAL_E/pos/Dets[chan-100].LGcalib[0];
+            printf("Ch %3d  E_lamda_adc %.1f:  P = %7.1f A = %7.0f; FWHM = %7.2f keV ; rel gain = %9.7lf\n",
+                   chan, CAL_E, pos, area, fwhm*Dets[chan-100].LGcalib[0]*CTC.e_lamda_gain[chan], CTC.e_lamda_gain[chan]);
             fprintf(fp, " %7.3f\n", fwhm*Dets[chan-100].LGcalib[0]*CTC.e_lamda_gain[chan]);
           }
         }
@@ -386,6 +388,10 @@ int main(int argc, char **argv) {
     write_his(his[i], 8192, i, spname, f_out);
   }
   fclose(f_out);
-
+  
+  f_out = fopen("ctc.dat", "w");
+  fwrite(his2, 1, sizeof(his2), f_out);
+  fclose(f_out);
+  
   return 0;
 }

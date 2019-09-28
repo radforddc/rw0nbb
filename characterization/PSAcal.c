@@ -24,7 +24,7 @@ int main(int argc, char **argv) {
 
 
   if (argc < 2) {
-    fprintf(stderr, "\nusage: %s fname_in [chnum_lo] [chnum_hi] [e_lo] [e_hi] [-n]\n\n", argv[0]);
+    fprintf(stderr, "\nusage: %s fname_in\n\n", argv[0]);
     return -1;
   }
   /* open skim data file as input */
@@ -280,41 +280,47 @@ int main(int argc, char **argv) {
       if (step == 4) {
         // put narrow gate on DE peak, and wider gate on bgnd
         if ((j = aovere2 * 800.0/PSA.ae_pos[chan] + 0.5) < 1500 && j > 0) {
-          if (e_ctc >= 1589.8 && e_ctc < 1594.8) {          // DEP; 5.0 keV
+          if (e_ctc >= DEP_E - 2.5 && e_ctc < DEP_E + 2.5) {            // DEP; 5.0 keV
             his[800+chan][j+3000]++;
-          } else if ((e_ctc >= 1560.0 && e_ctc < 1585.0) ||
-                     (e_ctc >= 1598.0 && e_ctc < 1613.0)) { // backgnd; 25+15 keV
+          } else if ((e_ctc >= DEP_E - 28.0 && e_ctc < DEP_E - 6.0) ||
+                     (e_ctc >= DEP_E + 6.0  && e_ctc < DEP_E + 24.0)) { // backgnd; 22+18 keV
             his[800+chan][j+1500]++;
-          } else if (e_ctc >= 2100.9 && e_ctc < 2105.9) {   // SEP; 5 keV
+          } else if (e_ctc >= SEP_E - 2.5 && e_ctc < SEP_E + 2.5) {     // SEP; 5 keV
             his[800+chan][j+6000]++;
-          } else if ((e_ctc >= 2072.0 && e_ctc < 2092.0) ||
-                     (e_ctc >= 2116.0 && e_ctc < 2136.0)) {  // backgnd; 20+20 keV
+          } else if ((e_ctc >= SEP_E - 30.0 && e_ctc < SEP_E - 6.0) ||
+                     (e_ctc >= SEP_E + 6.0 && e_ctc < SEP_E + 22.0)) { // backgnd; 24+16 keV
             his[800+chan][j+4500]++;
           }
         }
 
       } else if (step == 5) {
+        s2 = aovere2;
         // adjust for energy dependence of cut
-        // assume FWHM of A distribution from series noise is ~ 2 keV
-        // s2 = aovere2 - 4.0/sqrt((float) A_E_RISE) * 2.75 * (1.0 - 1593.0/e_ctc);  // 1593 keV = DE
-        s2 = aovere2 - (PZI.bl_rms[chan] * sqrt(2.0 / (float) PSA.a_e_rise[chan]) * 2.75 *
-                        (1.0 - 1593.0/e_ctc));  // 1593 keV = DE
+        // first correct for series noise: assume 2*sigma cut
+        // series noise contribution to A/E sigma = BL_RMS * sqrt(2*rise) * factor / E_raw
+        if (AOE_CORRECT_NOISE)
+          s2 -= (2.0 * PZI.bl_rms[chan] * sqrt(2.0 * (float) PSA.a_e_rise[chan]) *
+                 PSA.a_e_factor[chan] * gain/1593.0 * (1.0 - 1593.0/e_ctc));        // 1593 keV = DEP
+        // now deal with energy dependence of variation in A/E due to bremsstrahlung etc
+        s2 += AOE_CORRECT_EDEP * (PSA.ae_pos[chan] - PSA.ae_cut[chan]) * (1.0 - 1593.0/e_ctc);  // FIXME: Add limit at low e_ctc
+
         // count events in narrow gate on DEP and SEP, and wider gates on bgnd
-        if (e_ctc >= 1589.8 && e_ctc < 1594.8) {          // DEP; 5.0 keV
+        if (e_ctc >= DEP_E - 2.5 && e_ctc < DEP_E + 2.5) {            // DEP; 5.0 keV
           his[800+chan][1]++;
           if (s2 >= PSA.ae_cut[chan]) his[800+chan][2]++;
-        } else if ((e_ctc >= 1560.0 && e_ctc < 1585.0) ||
-                   (e_ctc >= 1598.0 && e_ctc < 1613.0)) { // backgnd; 25+15 keV
+        } else if ((e_ctc >= DEP_E - 28.0 && e_ctc < DEP_E - 6.0) ||
+                   (e_ctc >= DEP_E + 6.0  && e_ctc < DEP_E + 24.0)) { // backgnd; 22+18 keV
           his[800+chan][3]++;
           if (s2 >= PSA.ae_cut[chan]) his[800+chan][4]++;
-        } else if (e_ctc >= 2100.9 && e_ctc < 2105.9) {   // SEP; 5 keV
+        } else if (e_ctc >= SEP_E - 2.5 && e_ctc < SEP_E + 2.5) {     // SEP; 5 keV
           his[800+chan][5]++;
           if (s2 >= PSA.ae_cut[chan]) his[800+chan][6]++;
-        } else if ((e_ctc >= 2072.0 && e_ctc < 2092.0) ||
-                   (e_ctc >= 2116.0 && e_ctc < 2136.0)) {  // backgnd; 20+20 keV
+        } else if ((e_ctc >= SEP_E - 30.0 && e_ctc < SEP_E - 6.0) ||
+                   (e_ctc >= SEP_E + 6.0 && e_ctc < SEP_E + 22.0)) { // backgnd; 24+16 keV
           his[800+chan][7]++;
           if (s2 >= PSA.ae_cut[chan]) his[800+chan][8]++;
-        } else if (e_ctc >= 2010.0 && e_ctc < 2070.0) {  // continuum at ROI
+        } else if ((CAL_E > 2610 && e_ctc >= 2010.0 && e_ctc < 2070.0) ||  // continuum at ROI (Th-228)
+                   (CAL_E < 2600 && e_ctc >= 2041.0 && e_ctc < 2081.0))  { // continuum at ROI (Co-56)
           his[800+chan][9]++;
           if (s2 >= PSA.ae_cut[chan]) his[800+chan][10]++;
         }

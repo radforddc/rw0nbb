@@ -36,10 +36,11 @@
 //         can be over-ridden by values in filters.input
 // #define A_E_RISE   4     #define A_E_FACTOR 1100.0
 // #define A_E_RISE   8     #define A_E_FACTOR 275.0
+// #define A_E_RISE  10     #define A_E_FACTOR 210.0 
 // #define A_E_RISE  12     #define A_E_FACTOR 160.0
-#define A_E_RISE    8     // rise=fall ; flat = 0
-#define A_E_FACTOR 275.0  // multiplication factor for initial scaling of A/E
-#define GERDA_AoE   0     // set to 1 to use GERDA-style A/E instead
+#define A_E_RISE    8       // rise=fall ; flat = 0
+#define A_E_FACTOR 275.0    // multiplication factor for initial scaling of A/E
+#define GERDA_AoE   0       // set to 1 to use GERDA-style A/E instead
 
 // default asymmetric trap filter parameters for t0 determination
 //         can be over-ridden by values in filters.input
@@ -53,6 +54,23 @@
    set SPECIAL_DET_16 to 0 if there are too many pulser-tag-errors when running sortrun. */
 #define SPECIAL_DET_16 1
 #define DS0  0
+
+/* edit these lines to change the energy of the peak used for energy calibration,
+   and the enerhy pf the DEP used for A/E tuning */
+#define CAL_E 2614.5    // Th-228 full-energy peak
+//#define CAL_E 2598.458  // Co-56 full-energy 
+#define SEP_E (CAL_E - 511.0)
+#define DEP_E (CAL_E - 1022.0)
+
+/* edit these two lines to change the energy dependence of the A/E cut */
+#define AOE_CORRECT_NOISE 1    //  1 to correct A/E cut for series noise energy dependence, 0 to not correct
+#define AOE_CORRECT_EDEP  5.0  //  factor for energy dependence of DEP efficiency (from Co-56 data)
+
+/* Include this #define SHORT_BASELINE when some of your events have a flat baseline lasting
+   less than 820 samples. In those cases, data cleaning will throw all those events away.
+   When SHORT_BASELINE is defineD, data cleaning requires a basline of only 620 samples. */
+//#define SHORT_BASELINE
+
 
 /* ----------- data structures ---------- */
 

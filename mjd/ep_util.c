@@ -544,7 +544,7 @@ int inl_correct(MJDetInfo *Dets, MJRunInfo *runInfo,
                "  ... Reading original files\n", i);
         for (j=0; j < i; j++) {
           if (inl[j][0]) free(inl[j][0]);
-          if (inl[j][1]) free(inl[j][1]);           // FIXME - this is not tested
+          if (inl[j][1]) free(inl[j][1]);          // FIXME - this is not tested
           if (inl[j+100][0]) free(inl[j+100][0]);
           if (inl[j+100][1]) free(inl[j+100][1]);  // FIXME - this is not tested
           inl[j][0] = inl[j][1] = 0;
@@ -1407,18 +1407,32 @@ int data_clean(short *signal, int chan, DataClean *dcInfo) {
   double s1=0, s2=0;
 
   if (dcInfo->blsl_lo[chan] == -99) return 0;
-  for (i=50; i < 850; i++) {
+
+#ifdef SHORT_BASELINE
+  // Note: Need only 620 samples of signal baseline for this...
+  for (i=20; i < 620; i++) {
+    s1 += signal[i];
+    s2 += (int) signal[i] * (int) signal[i];
+  }
+  s2 = sqrt((600.0*s2 - s1*s1))/60.0; // RMS, 0.1 ADC units
+  s1 /= 60.0;                         // mean, 0.1 ADC units
+  sl = (trap_fixed(signal, 20, 200, 200))/4;  // slope, 0.02-ADC units
+#else
+  // Note: Need at least 820 samples of signal baseline for this...
+  for (i=20; i < 820; i++) {
     s1 += signal[i];
     s2 += (int) signal[i] * (int) signal[i];
   }
   s2 = sqrt((800.0*s2 - s1*s1))/80.0; // RMS, 0.1 ADC units
   s1 /= 80.0;                         // mean, 0.1 ADC units
-  sl = (trap_fixed(signal, 20, 300, 300))/6;  // slope, 0.02-ADC units
-  if (chan<100) {   // LG
+  sl = (trap_fixed(signal, 20, 300, 200))/6;  // slope, 0.02-ADC units
+#endif
+  if (chan<100) {   // HG
     s1 /= 3.0;      // 0.3 ADC units
     s2 /= 3.0;
     sl /= 3;        // 0.06 ADC units
   }
+
   if (DEBUG &&
       signal[1500] > 4800 && signal[1500] < 5150 &&
       (chan == 23 || chan == 27 || chan == 51) &&
@@ -1503,6 +1517,7 @@ float autopeak3(int *his, int lo, int hi, float *area, float *fwhm) {
   for (j=0; j<10; j++) {
     //printf(" > j, lo, hi, fwhm: %d %d %d %f\n", j, lo, hi, *fwhm);
     if ((pos = autopeak3a(his, lo, hi, area, fwhm)) < 1) return 0.0;
+    if (*fwhm > hi_save - lo_save) return 0.0;
     if (*fwhm == fwhm0) return pos;
     fwhm0 = *fwhm;
     lo = pos - 2.0f * *fwhm + 0.5;

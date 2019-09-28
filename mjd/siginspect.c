@@ -369,7 +369,7 @@ void signalselect(FILE *f_in, MJDetInfo *Dets, MJRunInfo *runInfo) {
       t100 = 900;
       for (i=901; i<1400; i++)
         if (signal[t100] < signal[i]) t100 = i;
-      for (t90 = t100-1; t90 > 900; t90--)
+      for (t90 = t100-1; t90 > 500; t90--)
         if ((signal[t90]-bl) <= (signal[t100] - bl)*19/20) break;
 
       /* do (optional) INL and PZ corrections */
