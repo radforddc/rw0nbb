@@ -89,7 +89,7 @@ int main(int argc, char **argv) {
 
   /* read energy correction factors from ctc.input */
   if (!CTC_info_read(&runInfo, &CTC)) {
-    printf("\n Warning: No inital charge-trapping correction data read. Does ctc.input exist?\n");
+    printf("\n Warning: No initial charge-trapping correction data read. Does ctc.input exist?\n");
   }
 
   printf("\nChs %d to %d, e_trapmax %d to %d\n\n", clo, chi, elo, ehi);

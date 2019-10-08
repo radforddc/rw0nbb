@@ -259,6 +259,31 @@ int decode_runfile_header(FILE *f_in, MJDetInfo *DetsReturn, MJRunInfo *runInfo)
   reclen = (unsigned int) buf[0];   // length of header in long words
   reclen2 = (unsigned int) buf[1];  // length of header in bytes
 
+  /* ----------------FlashCam data setup------------------ */
+  runInfo->flashcam = 0;
+  if (reclen == -1000000001 || strstr(((char *)buf) + 4, "FlashCam")) {
+    runInfo->flashcam = 1;
+    sprintf(MJMDets[0].DetName, "Det00");  // detector name
+    nMJDets = 1;
+    MJMDets[0].type            = 2;
+    MJMDets[0].HGChEnabled     = 1;
+    MJMDets[0].LGChEnabled     = 0;
+    MJMDets[0].HGPreSumEnabled = MJMDets[0].LGPreSumEnabled = 0;
+    MJMDets[0].HGPostrecnt     = MJMDets[0].LGPostrecnt     = 0;
+    MJMDets[0].HGPrerecnt      = MJMDets[0].LGPrerecnt      = 0;
+    /* copy results to returned data structures */ 
+    for (i=0; i<nMJDets; i++)
+      memcpy(&DetsReturn[i], &MJMDets[i], sizeof(MJDetInfo));
+    runInfo->nGe = nMJDets;
+    runInfo->nGD = 1;
+    runInfo->nPT = 0;
+    runInfo->nCC = 0;
+    runInfo->fileHeaderLen = 128/4;
+
+    fseek(f_in, 128, SEEK_SET);
+    return nMJDets;
+  }
+
   /* loop through the lines of the XML data until we find the end of the plist */
   while (fgets(line, sizeof(line), f_in) && strncmp(line, "</plist>", 8)) {
 

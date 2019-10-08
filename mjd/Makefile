@@ -10,8 +10,8 @@ mk_source_files = sortrun.c decode_runfile_header.c eventbuild.c ep_util.c
 mk_header_files = MJDSort.h runBits.h
 all_programs = pulser_tag_init presort PZcal skim skim_opt CTcal PSAcal \
                sortrun rundiff rundiff2 siginspect threshold threshold2 \
-               sumrms run_check prebuild \
-               inlcheck compress decompress deadtime enr_rms
+               sumrms run_check prebuild inlcheck \
+               compress decompress  compress_fcio decompress_fcio deadtime enr_rms
 
 extras = noise coinc 
 
@@ -83,6 +83,12 @@ compress_dptc: $(mk_header_files)  presort.c decode_runfile_header.c ep_util.c c
 
 decompress: $(mk_header_files)  presort.c decode_runfile_header.c ep_util.c decompress.c
 	$(CC) $(CFLAGS) -o $@ presort.c decode_runfile_header.c ep_util.c decompress.c -lm
+
+compress_fcio: compress_fcio.c
+	$(CC) $(CFLAGS) -o $@ compress_fcio.c
+
+decompress_fcio: decompress_fcio.c
+	$(CC) $(CFLAGS) -o $@ decompress_fcio.c
 
 deadtime: $(mk_source_files) $(mk_header_files) eventprocess.c ep_finalize_DT_thresh.c
 	$(CC) $(CFLAGS) -o $@ $(mk_source_files) eventprocess.c ep_finalize_DT_thresh.c -lm

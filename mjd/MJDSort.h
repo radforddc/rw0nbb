@@ -64,7 +64,7 @@
 
 /* edit these two lines to change the energy dependence of the A/E cut */
 #define AOE_CORRECT_NOISE 1    //  1 to correct A/E cut for series noise energy dependence, 0 to not correct
-#define AOE_CORRECT_EDEP  5.0  //  factor for energy dependence of DEP efficiency (from Co-56 data)
+#define AOE_CORRECT_EDEP  0.0  //  factor for energy dependence of DEP efficiency (from Co-56 data)
 
 /* Include this #define SHORT_BASELINE when some of your events have a flat baseline lasting
    less than 820 samples. In those cases, data cleaning will throw all those events away.
@@ -124,6 +124,7 @@ typedef struct{
   int    argc;
   char   **argv;           // arguments to calling program (normally sortrun.c)
   // int   minChTimeDiff;     // minimum time diff for valid events in one Ge digitizer channel
+  int   flashcam;
 } MJRunInfo;
 
 typedef struct {

@@ -172,7 +172,7 @@ void signalselect(FILE *f_in, MJDetInfo *Dets, MJRunInfo *runInfo) {
     f_out = fopen("s.rms", "w");
     if (kev==2 || doPZ) doPZ = PZ_info_read(runInfo, &PZI);
     if (kev==2 && !doPZ) {
-      printf("\n ERROR: No inital pole-zero data read, needed for keV. Does PZ.input exist?\n");
+      printf("\n ERROR: No initial pole-zero data read, needed for keV. Does PZ.input exist?\n");
       return;
     }
 

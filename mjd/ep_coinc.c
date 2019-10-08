@@ -126,12 +126,12 @@ int eventprocess(MJDetInfo *Dets, MJRunInfo *runInfo, int nChData, BdEvent *ChDa
 
     /* read PZ correction info */
     if (!PZ_info_read(runInfo, &PZI)) {
-      printf("\n ERROR: No inital pole-zero data read. Does PZ.input exist?\n");
+      printf("\n ERROR: No initial pole-zero data read. Does PZ.input exist?\n");
       exit(-1);
     }
     /* read energy correction factors from ctc.input */
     if (!CTC_info_read(runInfo, &CTC)) {
-      printf("\n Warning: No inital charge-trapping correction data read. Does ctc.input exist?\n");
+      printf("\n Warning: No initial charge-trapping correction data read. Does ctc.input exist?\n");
       exit(-1);
     }
     /* read A/E, DCR, and lamda values from psa.input */

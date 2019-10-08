@@ -119,18 +119,18 @@ int main(int argc, char **argv) {
 
   /* read PZ orrection info */
   if (!PZ_info_read(&runInfo, &PZI)) {
-    printf("\n ERROR: No inital pole-zero data read. Does PZ.input exist?\n");
+    printf("\n ERROR: No initial pole-zero data read. Does PZ.input exist?\n");
     exit(-1);
   }
   /* read energy correction factors from ctc.input */
   if (!CTC_info_read(&runInfo, &CTC)) {
-    printf("\n ERROR: No inital charge-trapping correction data read. Does ctc.input exist?\n");
+    printf("\n ERROR: No initial charge-trapping correction data read. Does ctc.input exist?\n");
     exit(-1);
   }
   /* read A/E, DCR, and lamda values from psa.input */
   /* also read individual trapezoid values from filters.input (if it exists) */
   if (!PSA_info_read(&runInfo, &PSA)) {
-    printf("\n ERROR: No inital PSA data read. Does psa.input exist?\n");
+    printf("\n ERROR: No initial PSA data read. Does psa.input exist?\n");
     if (keep_ae_cut) {
       keep_ae_cut = 0;
       printf("Will NOT preserve A/E cut relative to A/E position\n");
