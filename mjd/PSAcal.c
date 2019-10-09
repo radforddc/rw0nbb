@@ -86,7 +86,11 @@ int main(int argc, char **argv) {
   // read saved skim data from f_in
   fread(&nsd, sizeof(int), 1, f_in);
   fread(&Dets[0], sizeof(Dets[0]), NMJDETS, f_in);
-  fread(&runInfo, sizeof(runInfo), 1, f_in);
+  fread(&runInfo, sizeof(runInfo) - 8*sizeof(int), 1, f_in);
+  if (runInfo.idNum == 0) {
+    runInfo.flashcam = 1;
+    fread(&(runInfo.flashcam), 8*sizeof(int), 1, f_in);
+  }
   /* malloc space for SavedData */
   if ((sd = malloc(nsd*sizeof(*sd))) == NULL ||
       (sd[0] = malloc(nsd*sizeof(SavedData))) == NULL) {

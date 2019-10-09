@@ -209,8 +209,8 @@ int main(int argc, char **argv) {
       if (board_type != runInfo.dataIdGM &&
           board_type != runInfo.dataIdGA) {
         if (evlen > 10000) {
-          printf("\n >>>> ERROR: Event length too long??\n"
-                 " >>>> This file is probably corruped, ending scan!\n");
+          printf("\n >>>> ERROR: Event length too long??  board_type = %d, length = %d\n"
+                 " >>>> This file is probably corruped, ending scan!\n", board_type, evlen);
           break;
         }
         fseek(f_in, 4*(evlen-2), SEEK_CUR);
@@ -229,7 +229,6 @@ int main(int argc, char **argv) {
       if ((j = module_lu[crate][slot]) < 0 || ch >= 10) continue;
       chan = chan_lu[j][ch];
     }
-    if (chan < clo || chan > chi) continue;
 
     /* ========== read in the rest of the event data ========== */
     if (fread(evtdat, sizeof(int), evlen-2, f_in) != evlen-2) {
@@ -239,6 +238,7 @@ int main(int argc, char **argv) {
     if (++totevts % 50000 == 0) {
       printf(" %8d evts in, %d out, %d saved\n", totevts, out_evts, isd); fflush(stdout);
     }
+    if (chan < clo || chan > chi) continue;
 
     long long int time = 0;
     if (runInfo.flashcam) {
@@ -468,7 +468,12 @@ int main(int argc, char **argv) {
   f_out = fopen("skim.dat", "w");
   fwrite(&nsd, sizeof(int), 1, f_out);
   fwrite(&Dets[0], sizeof(Dets[0]), NMJDETS, f_out);
-  fwrite(&runInfo, sizeof(runInfo), 1, f_out);
+  if (runInfo.flashcam) {
+    runInfo.idNum = 0;
+    fwrite(&runInfo, sizeof(runInfo), 1, f_out);  // for backwards compatibility
+  } else {
+    fwrite(&runInfo, sizeof(runInfo) - 8*sizeof(int), 1, f_out);
+  }
   // fwrite(*sd, sizeof(SavedData), nsd, f_out);
   // writing large files all in one go doesn't seem to work?
   for (isd = 0; isd < nsd; isd += sdchunk) {

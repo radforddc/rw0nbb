@@ -118,11 +118,13 @@ typedef struct{
   int    nCC, CCcrate[10], CCslot[10];             // Ge controller card crate and slot info
 
   int    fileHeaderLen;
-  int    analysisPass;     // to allow for multiple-pass analysis of the same file
-  int    firstRunNumber;   // starting run number for a data subset
+  int    analysisPass;        // to allow for multiple-pass analysis of the same file
+  int    firstRunNumber;      // starting run number for a data subset
   int    argc;
-  char   **argv;           // arguments to calling program (normally sortrun.c)
+  char   **argv;              // arguments to calling program (normally sortrun.c)
   // int   minChTimeDiff;     // minimum time diff for valid events in one Ge digitizer channel
+  int    flashcam;
+  int    reserved[7];
 } MJRunInfo;
 
 typedef struct {

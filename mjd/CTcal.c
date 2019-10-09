@@ -75,7 +75,11 @@ int main(int argc, char **argv) {
   // read saved skim data from f_in
   fread(&nsd, sizeof(int), 1, f_in);
   fread(&Dets[0], sizeof(Dets[0]), NMJDETS, f_in);
-  fread(&runInfo, sizeof(runInfo), 1, f_in);
+  fread(&runInfo, sizeof(runInfo) - 8*sizeof(int), 1, f_in);
+  if (runInfo.idNum == 0) {
+    runInfo.flashcam = 1;
+    fread(&(runInfo.flashcam), 8*sizeof(int), 1, f_in);
+  }
   /* malloc space for SavedData */
   if ((sd = malloc(nsd*sizeof(*sd))) == NULL ||
       (sd[0] = malloc(nsd*sizeof(SavedData))) == NULL) {
@@ -126,9 +130,9 @@ int main(int argc, char **argv) {
       e_raw  = sd[isd]->e;
       drift  = sd[isd]->drift;
       lamda  = sd[isd]->lamda;
+      if (chan < clo || chan > chi) continue;
       if (chan < 100 && (e_raw < elo || e_raw > ehi)) continue;
       if (chan > 99 && (e_raw < elo/3.4 || e_raw > ehi/3.2)) continue;
-
       // histogram raw energy in [ADC] units
       if (step == 1) {
         if (e_raw < 8192) his[chan][(int)(e_raw + 0.5)]++;

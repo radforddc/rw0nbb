@@ -234,7 +234,6 @@ void signalselect(FILE *f_in, MJDetInfo *Dets, MJRunInfo *runInfo, int step) {
       if ((j = module_lu[crate][slot]) < 0 || ch >= 10) continue;
       chan = chan_lu[j][ch];
     }
-    if (chan < clo || chan > chi) continue;
 
     /* ========== read in the rest of the event data ========== */
     if (fread(evtdat, sizeof(int), evlen-2, f_in) != evlen-2) {
@@ -244,6 +243,7 @@ void signalselect(FILE *f_in, MJDetInfo *Dets, MJRunInfo *runInfo, int step) {
     if (++totevts % 50000 == 0) {
       printf(" %8d evts in, %d out\n", totevts, out_evts); fflush(stdout);
     }
+    if (chan < clo || chan > chi) continue;
 
     long long int time = 0;
     if (runInfo->flashcam) {
