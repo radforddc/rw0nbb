@@ -181,7 +181,8 @@ int main(int argc, char **argv) {
   // start loop over reading events from input file
 
   while (1) {
-    int evlen = 0;
+    int evlen = 0, crate=0, slot=0, board_type = 0;
+    chan = -1;
 
     if (runInfo.flashcam) {
       while ((j = fread(&k, sizeof(int), 1, f_in)) == 1 && k < 1200) {
@@ -195,7 +196,7 @@ int main(int argc, char **argv) {
 
     } else {
       if (fread(head, sizeof(head), 1, f_in) != 1) break;
-      int board_type = head[0] >> 18;
+      board_type = head[0] >> 18;
       evlen = (head[0] & 0x3ffff);
 
       if (board_type == 0) {  // a new runfile header! file must be corrupt?
@@ -217,17 +218,14 @@ int main(int argc, char **argv) {
         continue;
       }
 
-      int slot  = (head[1] >> 16) & 0x1f;
-      int crate = (head[1] >> 21) & 0xf;
+      slot  = (head[1] >> 16) & 0x1f;
+      crate = (head[1] >> 21) & 0xf;
       if (crate < 0 || crate > NCRATES ||
           slot  < 0 || slot > 20) {
         printf("ERROR: Illegal VME crate or slot number %d %d\n", crate, slot);
         if (fread(evtdat, sizeof(int), evlen-2, f_in) != evlen-2) break;
         continue;
       }
-      int ch = (evtdat[1] & 0xf);
-      if ((j = module_lu[crate][slot]) < 0 || ch >= 10) continue;
-      chan = chan_lu[j][ch];
     }
 
     /* ========== read in the rest of the event data ========== */
@@ -235,7 +233,18 @@ int main(int argc, char **argv) {
       printf("  No more data...\n");
       break;
     }
-    if (++totevts % 50000 == 0) {
+    int ch = (evtdat[1] & 0xf);
+    if ((j = module_lu[crate][slot]) < 0 || ch >= 10) continue;
+    chan = chan_lu[j][ch];
+    if (chan < 0 || chan > 157 ||
+        ((chan < 100 && !Dets[chan].HGChEnabled) ||
+         (chan > 99 && !Dets[chan-100].LGChEnabled))) {
+      printf("Data from detector not enabled! Chan = %d  crate, slot, j, ch = %d %d %d %d  len = %d\n",
+             chan, crate, slot, module_lu[crate][slot], ch, evlen);
+      continue;
+    }
+
+    if (++totevts % 50000 == 0) {   
       printf(" %8d evts in, %d out, %d saved\n", totevts, out_evts, isd); fflush(stdout);
     }
     if (chan < clo || chan > chi) continue;

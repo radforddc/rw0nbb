@@ -306,7 +306,7 @@ int main(int argc, char **argv) {
           s2 -= (2.0 * PZI.bl_rms[chan] * sqrt(2.0 * (float) PSA.a_e_rise[chan]) *
                  PSA.a_e_factor[chan] * gain/1593.0 * (1.0 - 1593.0/e_ctc));        // 1593 keV = DEP
         // now deal with energy dependence of variation in A/E due to bremsstrahlung etc
-        s2 += AOE_CORRECT_EDEP * (PSA.ae_pos[chan] - PSA.ae_cut[chan]) * (1.0 - 1593.0/e_ctc);  // FIXME: Add limit at low e_ctc
+        s2 += AOE_CORRECT_EDEP * (PSA.ae_pos[chan] - PSA.ae_cut[chan]) * (1.0 - e_ctc/1593.0);  // FIXME: Add limit at low e_ctc?
 
         // count events in narrow gate on DEP and SEP, and wider gates on bgnd
         if (e_ctc >= DEP_E - 2.5 && e_ctc < DEP_E + 2.5) {            // DEP; 5.0 keV

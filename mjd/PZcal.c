@@ -117,12 +117,12 @@ void signalselect(FILE *f_in, MJDetInfo *Dets, MJRunInfo *runInfo, int step) {
     chi=100+runInfo->nGe-1;
     elo = 3000;
     ehi = 7200;
-    if (runInfo->argc > 2) clo = atoi(runInfo->argv[3]);
-    if (runInfo->argc > 3) chi = atoi(runInfo->argv[4]);
-    if (runInfo->argc > 4) elo = atoi(runInfo->argv[5]);
-    if (runInfo->argc > 5) ehi = atoi(runInfo->argv[6]);
+    if (runInfo->argc > 2) clo = atoi(runInfo->argv[2]);
+    if (runInfo->argc > 3) chi = atoi(runInfo->argv[3]);
+    if (runInfo->argc > 4) elo = atoi(runInfo->argv[4]);
+    if (runInfo->argc > 5) ehi = atoi(runInfo->argv[5]);
     if (clo < 0) clo = 0;
-    if (chi > 100+runInfo->nGe) chi = 100+runInfo->nGe;
+    printf("\nChs %d to %d, e_trapmax %d to %d\n\n", clo, chi, elo, ehi);
 
     /* decide if there is presumming; if so, then we also need to
        make sure we have the space to hold expanded signals */
@@ -180,13 +180,13 @@ void signalselect(FILE *f_in, MJDetInfo *Dets, MJRunInfo *runInfo, int step) {
     }
 
   }
-  printf("\nChs %d to %d, e_trapmax %d to %d\n\n", clo, chi, elo, ehi);
 
   /* start loop over reading events from input file
      ============================================== */
 
   while (1) {
-    int evlen = 0;
+    int evlen = 0, crate=0, slot=0, board_type = 0;
+    chan = -1;
 
     if (runInfo->flashcam) {
       while ((j = fread(&k, sizeof(int), 1, f_in)) == 1 && k < 1200) {
@@ -200,7 +200,7 @@ void signalselect(FILE *f_in, MJDetInfo *Dets, MJRunInfo *runInfo, int step) {
 
     } else {
       if (fread(head, sizeof(head), 1, f_in) != 1) break;
-      int board_type = head[0] >> 18;
+      board_type = head[0] >> 18;
       evlen = (head[0] & 0x3ffff);
 
       if (board_type == 0) {  // a new runfile header! file must be corrupt?
@@ -222,17 +222,14 @@ void signalselect(FILE *f_in, MJDetInfo *Dets, MJRunInfo *runInfo, int step) {
         continue;
       }
 
-      int slot  = (head[1] >> 16) & 0x1f;
-      int crate = (head[1] >> 21) & 0xf;
+      slot  = (head[1] >> 16) & 0x1f;
+      crate = (head[1] >> 21) & 0xf;
       if (crate < 0 || crate > NCRATES ||
           slot  < 0 || slot > 20) {
         printf("ERROR: Illegal VME crate or slot number %d %d\n", crate, slot);
         if (fread(evtdat, sizeof(int), evlen-2, f_in) != evlen-2) break;
         continue;
       }
-      int ch = (evtdat[1] & 0xf);
-      if ((j = module_lu[crate][slot]) < 0 || ch >= 10) continue;
-      chan = chan_lu[j][ch];
     }
 
     /* ========== read in the rest of the event data ========== */
@@ -240,6 +237,16 @@ void signalselect(FILE *f_in, MJDetInfo *Dets, MJRunInfo *runInfo, int step) {
       printf("  No more data...\n");
       break;
     }
+    int ch = (evtdat[1] & 0xf);
+    if ((j = module_lu[crate][slot]) >= 0 && ch < 10) chan = chan_lu[j][ch];
+    if (chan < 0 || chan > 157 ||
+        ((chan < 100 && !Dets[chan].HGChEnabled) ||
+         (chan > 99 && !Dets[chan-100].LGChEnabled))) {
+      printf("Data from detector not enabled! Chan = %d  crate, slot, j, ch = %d %d %d %d  len = %d\n",
+             chan, crate, slot, module_lu[crate][slot], ch, evlen);
+      continue;
+    }
+
     if (++totevts % 50000 == 0) {
       printf(" %8d evts in, %d out\n", totevts, out_evts); fflush(stdout);
     }

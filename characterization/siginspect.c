@@ -269,6 +269,12 @@ void signalselect(FILE *f_in, MJDetInfo *Dets, MJRunInfo *runInfo) {
     ch = (evtdat[1] & 0xf);
     if ((j = module_lu[crate][slot]) >= 0 && ch < 10) {
       chan = chan_lu[j][ch];
+      if (chan >= 0 && chan <= 157 &&
+          ((chan < 100 && !Dets[chan].HGChEnabled) ||
+           (chan > 99 && !Dets[chan-100].LGChEnabled))) {
+        printf("Data from detector not enabled! Chan = %d  crate, slot, j, ch = %d %d %d %d\n", chan, crate, slot, j, ch);
+        chan = -1;
+      }
       if (chan < clo || chan > chi) continue;
       signal = (short *) evtdat + 28;
       if (evlen != 1026 && signal[0] == 2020 && // signal is compressed; decompress it
