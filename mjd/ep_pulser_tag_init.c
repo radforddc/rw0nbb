@@ -71,6 +71,16 @@ int eventprocess(MJDetInfo *Dets, MJRunInfo *runInfo, int nChData, BdEvent *ChDa
   /* --------------- initialization --------------- */
   if (first) {
     if (ep_init(Dets, runInfo, module_lu, det_lu, chan_lu) < 0) return -1;
+
+    printf("\n --------------------------------------\n"
+           "%d pulser-tag channels in\ncrate slot channel -> chan\n", runInfo->nPT);
+    for (i=0; i<runInfo->nPT; i++) {
+      chan = chan_lu[module_lu[runInfo->PTcrate[i]][runInfo->PTslot[i]]][runInfo->PTchan[i]];
+      printf("%5d %4d %6d  ->  %4d\n",
+             runInfo->PTcrate[i], runInfo->PTslot[i], runInfo->PTchan[i], chan);
+    }
+    printf(" --------------------------------------\n\n");
+           
     /* malloc and clear histogram space */
     if ((his[0] = calloc(400*8192, sizeof(int))) == NULL) {
       printf("ERROR in eventprocess(); cannot malloc his!\n");

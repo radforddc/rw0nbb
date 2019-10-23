@@ -239,7 +239,8 @@ void signalselect(FILE *f_in, MJDetInfo *Dets, MJRunInfo *runInfo, int step) {
     }
     int ch = (evtdat[1] & 0xf);
     if ((j = module_lu[crate][slot]) >= 0 && ch < 10) chan = chan_lu[j][ch];
-    if (chan < 0 || chan > 157 ||
+    if (chan > 99 + runInfo->nGe && chan < 100 + runInfo->nGe + runInfo->nPT) continue; // pulser tag channels
+    if (chan < 0 || chan > 99 + runInfo->nGe + runInfo->nPT ||
         ((chan < 100 && !Dets[chan].HGChEnabled) ||
          (chan > 99 && !Dets[chan-100].LGChEnabled))) {
       printf("Data from detector not enabled! Chan = %d  crate, slot, j, ch = %d %d %d %d  len = %d\n",

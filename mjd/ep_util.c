@@ -37,6 +37,12 @@ void fillEvent(MJRunInfo *runInfo, int nChData, BdEvent *ChData[],
       if (ChData[ievt]->chan < 0) continue;
       /* ChData[ievt]->sig  = (short *) ChData[ievt]->evbuf + 32; // now done in eventbuild.c */
       ChData[ievt]->e    = (float) trap_max(ChData[ievt]->sig, &tmax, TRAP_RISE, TRAP_FLAT) / (double) TRAP_RISE;
+      // some pulser-tag channels have too high an energy, due to presumming. here is where I correct that.
+      if (ChData[ievt]->chan > 99 + runInfo->nGe) {
+        //if (ChData[ievt]->e < -10) ChData[ievt]->e = -ChData[ievt]->e;
+        while (ChData[ievt]->e > 4000)
+          ChData[ievt]->e /= 4.0;
+      }
     }
   }
 }
@@ -88,6 +94,9 @@ int checkForPulserEvent(MJDetInfo *Dets, MJRunInfo *runInfo,
            then this must really be a pulser event */
         if (chan >= 100 + runInfo->nGe) pulser = 1;
       }
+      /* if a pulser tag channel is hit even with a negative energy,
+         then this must really be a pulser event */
+      if (chan >= 100 + runInfo->nGe && energy < -20) pulser = 1;
     }
   }
 
