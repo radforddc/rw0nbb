@@ -1644,7 +1644,7 @@ int PZ_info_read(MJRunInfo *runInfo, PZinfo *PZI) {
   */
   for (i=0; i<200; i++) {
     PZI->baseline[i] = 0;
-    PZI->tau[i] = 72.5;
+    PZI->tau[i] = 72.5;     // this and three following values are typical values for MJD
     PZI->tau2[i] = 2.1;
     PZI->frac2[i] = 0.007;
     PZI->bl_rms[i] = 4;

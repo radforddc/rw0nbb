@@ -1,3 +1,13 @@
+To compile:
+
+edit MJDsort.h
+Change the line '#define PATH_TO_NONLIN_DATA   "/Users/fy2/code2/nonlin_data"'
+      tp point the PATH... to the location of the nonlin_data on your system
+make
+
+Add the location of these codes  (...rw0nb/mjd) to your path.
+
+
 
 To analyze a data subset:
 

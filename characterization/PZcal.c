@@ -104,13 +104,10 @@ void signalselect(FILE *f_in, MJDetInfo *Dets, MJRunInfo *runInfo, int step) {
 
     if (ep_init(Dets, runInfo, module_lu, det_lu, chan_lu) < 0) return;
     if (!(j = PZ_info_read(runInfo, &PZI))) {
-      printf("\n ERROR: No initial pole-zero data read. Starting with baselines = 0.\n");
+      printf("\n ERROR: No initial pole-zero data read.\n"
+             " >>>> Starting with first baseline seen for each channl as initial estimate.\n");
       for (chan = 0; chan < 200; chan++) {
-        PZI.baseline[chan] = 0;
-        PZI.bl_rms[chan]   = 3.0;
-        PZI.tau[chan]      = 72.5;
-        PZI.tau2[chan]     = 2.1;
-        PZI.frac2[chan]    = 0.007;
+        PZI.baseline[chan] = -9999;  // special flag to say that baseline is unknown
       }
     }
 
@@ -354,6 +351,8 @@ void signalselect(FILE *f_in, MJDetInfo *Dets, MJRunInfo *runInfo, int step) {
       s1 /= 100.0;                   // mean baseline
       s2 = sqrt(s2/100.0 - s1*s1);   // RMS
       /* histogram mean baseline value (for new PZ.output) */
+      if (PZI.baseline[chan] == -9999)  // baselines unknown! use this first signal from chan as estimate.
+        PZI.baseline[chan] = s1;
       bl = s1 + 1000.5 - PZI.baseline[chan];
       if (bl > 0 || bl < 1900) his[chan][bl]++;
       if (s2 < 50.0) his[200+chan][(int)(10.0*s2 + 0.5)]++;
