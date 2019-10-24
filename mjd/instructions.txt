@@ -44,15 +44,17 @@ To analyze a data subset:
  1 57 3000
 #---------------------
 
-  - Once you have your presorted DS* file, you have several options to proceed.
+- Once you have your presorted DS* file, you have several options to proceed.
   
-  - For a calibration data subset, you want to use it to auto-tune the:
+- For a calibration data subset, you want to use it to auto-tune the:
         - pole-zero parameters                          (PZ.input)
         - charge-trapping-correction parameters         (ctc.input)
         - pulse-shape-analysis (A/E and DCR) parameters (psa.input)
         - energy calibrations                           (gains.input)
-    I suggest you include a previous version of a PZ.input file and a gains.input file to give good starting values.
-  - The easiest way to proceed is to use the Makefile included in test_mjd.
+
+- I suggest you include a previous version of a PZ.input file and a gains.input file to give good starting values.
+
+- The easiest way to proceed is to use the Makefile included in test_mjd.
     Copy the Makefile to your working directory, and edit the line defining $(HOME) to point to the executables, then
     $ ln -s DSyyyy Data
     $ make
@@ -65,7 +67,7 @@ To analyze a data subset:
     $ PSAcal skim.dat
     $ mv psa.output psa.input
     
-  - For a background data subset, copy the appropriate PZ.input, ctc.input, gains.input, and psa.input
+- For a background data subset, copy the appropriate PZ.input, ctc.input, gains.input, and psa.input
     from the most appropriate calibration run into the working directory. Make sure you have the .dcl file
     created by presort there, also. Then:
     $ sortrun DSyyyy
