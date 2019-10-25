@@ -104,7 +104,7 @@ void signalselect(FILE *f_in, MJDetInfo *Dets, MJRunInfo *runInfo, int step) {
 
     if (ep_init(Dets, runInfo, module_lu, det_lu, chan_lu) < 0) return;
     if (!(j = PZ_info_read(runInfo, &PZI))) {
-      printf("\n ERROR: No initial pole-zero data read.\n"
+      printf("\n WARNING: No initial pole-zero data read.\n"
              " >>>> Starting with first baseline seen for each channl as initial estimate.\n");
       for (chan = 0; chan < 200; chan++) {
         PZI.baseline[chan] = -9999;  // special flag to say that baseline is unknown
