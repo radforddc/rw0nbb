@@ -20,11 +20,14 @@ int main(int argc, char **argv) {
 
   MJDetInfo  Dets[NMJDETS];
   MJRunInfo  runInfo;
-  int        argn=1, keep_ae_cut = 0, keep_pos[200];
+  int        argn=1, keep_ae_cut = 0;
+  float      keep_pos[200];
 
 
   if (argc < 2) {
-    fprintf(stderr, "\nusage: %s fname_in\n\n", argv[0]);
+    fprintf(stderr, "\nusage: %s fname_in [-a]\n"
+            " -a option: keep A/E cut relative to A/E peak position from psa.input] \n\n",
+            argv[0]);
     return -1;
   }
   /* open skim data file as input */
@@ -306,7 +309,8 @@ int main(int argc, char **argv) {
           s2 -= (2.0 * PZI.bl_rms[chan] * sqrt(2.0 * (float) PSA.a_e_rise[chan]) *
                  PSA.a_e_factor[chan] * gain/1593.0 * (1.0 - 1593.0/e_ctc));        // 1593 keV = DEP
         // now deal with energy dependence of variation in A/E due to bremsstrahlung etc
-        s2 += AOE_CORRECT_EDEP * (PSA.ae_pos[chan] - PSA.ae_cut[chan]) * (1.0 - e_ctc/1593.0);  // FIXME: Add limit at low e_ctc?
+        // s2 -= AOE_CORRECT_EDEP * (PSA.ae_pos[chan] - PSA.ae_cut[chan]) * (1.0 - e_ctc/1593.0);  // linear; FIXME: Add limit at low e_ctc?
+        s2 -= AOE_CORRECT_EDEP * (PSA.ae_pos[chan] - PSA.ae_cut[chan]) * (1.0 - e_ctc*e_ctc/1593.0/1593.0);  // quadratic; FIXME: Add limit at low e_ctc?
 
         // count events in narrow gate on DEP and SEP, and wider gates on bgnd
         if (e_ctc >= DEP_E - 2.5 && e_ctc < DEP_E + 2.5) {            // DEP; 5.0 keV
@@ -547,7 +551,11 @@ int main(int argc, char **argv) {
         printf("chan %3d |  k, s2 = %3d %6.3f -> %3d %6.3f;  pos adjustment = %6.2f\n",
                chan, k+1, s3, k, s2, s2/(s2-s3) + (float) k);
         if (keep_ae_cut) {
+          float csave = PSA.ae_cut[chan];
           PSA.ae_cut[chan] += PSA.ae_pos[chan] - keep_pos[chan];
+          if (0) printf("chan %3d A/E: pos %.2f -> %.2f; cut %.2f -> %.2f; diff %.2f %.2f\n",
+                        chan, keep_pos[chan], PSA.ae_pos[chan], csave, PSA.ae_cut[chan],
+                        PSA.ae_pos[chan] - keep_pos[chan], PSA.ae_cut[chan] - csave);
         }
       }
     }
