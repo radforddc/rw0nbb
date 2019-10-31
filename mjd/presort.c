@@ -56,63 +56,65 @@ int main(int argc, char **argv) {
   nDets = decode_runfile_header(f_in, detInfo, &runInfo);
   if (nDets < 1) return 1;
 
-  /* write out results */
+  if (!runInfo.flashcam) {
+    /* write out results */
 #ifndef QUIET
-  for (i=0; i<nDets; i++) {
-    if (i%20 == 0)
-      printf("#    DetID      pos      name     HiGain GAT Enab Thresh     HVch  MaxV Target"
-             "     Pulser times enab  ampl atten  CC\n");
-    printf(" %3d  was %2d %8s %9s   %d,%2.2d,%d %4d %3d %6d %3d,%2.2d,%d"
-           " %5d %6d %9d %7d %3d %5d %3d %d %3d\n", i,
-           detInfo[i].OrcaDetID,       detInfo[i].StrName,
-           detInfo[i].DetName,         detInfo[i].crate,
-           detInfo[i].slot,            detInfo[i].chanHi,
-           detInfo[i].crate*512 + detInfo[i].slot*16 + detInfo[i].chanHi, 
-           detInfo[i].HGChEnabled,     detInfo[i].HGTrapThreshold,
-           detInfo[i].HVCrate,         detInfo[i].HVCard,
-           detInfo[i].HVChan,          detInfo[i].HVMax,
-           detInfo[i].HVtarget,
-           detInfo[i].pulseHighTime,   detInfo[i].pulseLowTime,
-           detInfo[i].pulserEnabled,   detInfo[i].amplitude,
-           detInfo[i].attenuated,      detInfo[i].finalAttenuated,
-           detInfo[i].CCnum);
-  }
+    for (i=0; i<nDets; i++) {
+      if (i%20 == 0)
+        printf("#    DetID      pos      name     HiGain GAT Enab Thresh     HVch  MaxV Target"
+               "     Pulser times enab  ampl atten  CC\n");
+      printf(" %3d  was %2d %8s %9s   %d,%2.2d,%d %4d %3d %6d %3d,%2.2d,%d"
+             " %5d %6d %9d %7d %3d %5d %3d %d %3d\n", i,
+             detInfo[i].OrcaDetID,       detInfo[i].StrName,
+             detInfo[i].DetName,         detInfo[i].crate,
+             detInfo[i].slot,            detInfo[i].chanHi,
+             detInfo[i].crate*512 + detInfo[i].slot*16 + detInfo[i].chanHi, 
+             detInfo[i].HGChEnabled,     detInfo[i].HGTrapThreshold,
+             detInfo[i].HVCrate,         detInfo[i].HVCard,
+             detInfo[i].HVChan,          detInfo[i].HVMax,
+             detInfo[i].HVtarget,
+             detInfo[i].pulseHighTime,   detInfo[i].pulseLowTime,
+             detInfo[i].pulserEnabled,   detInfo[i].amplitude,
+             detInfo[i].attenuated,      detInfo[i].finalAttenuated,
+             detInfo[i].CCnum);
+    }
 #endif
 
-  printf("\n# PT_ID  Dig\n");
-  for (i=0; i<runInfo.nPT; i++) {
-    printf(" %3d  %d,%2.2d,%d\n", i,
-           runInfo.PTcrate[i], runInfo.PTslot[i], runInfo.PTchan[i]);
-  }
+    printf("\n# PT_ID  Dig\n");
+    for (i=0; i<runInfo.nPT; i++) {
+      printf(" %3d  %d,%2.2d,%d\n", i,
+             runInfo.PTcrate[i], runInfo.PTslot[i], runInfo.PTchan[i]);
+    }
 
-  if (runInfo.dataIdGM == 0 && runInfo.dataIdGA == 0) {
-    printf("\n No data ID found for Gretina4M or 4A data!\n");
-    return 1;
-  }
+    if (runInfo.dataIdGM == 0 && runInfo.dataIdGA == 0) {
+      printf("\n No data ID found for Gretina4M or 4A data!\n");
+      return 1;
+    }
 
 #ifndef QUIET
-  if (runInfo.dataIdGM)
-    printf("\n Data ID %d found for Gretina4M data\n", runInfo.dataIdGM);
-  if (runInfo.dataIdGA)
-    printf("\n Data ID %d found for Gretina4A data\n", runInfo.dataIdGA);
-  printf(" Run number: %d in file %s\n"
-         " Start time: %s  (%d)\n"
-         " Run bits  : %d = 0x%8.8x\n",
-         runInfo.runNumber, runInfo.filename, runInfo.date, runInfo.startTime,
-         runInfo.runType, runInfo.runType);
-  for (i=0; i<32; i++) {
-    if (runInfo.runType & 1<<i) printf("  0x%8.8x - %s\n", 1<<i, runBitDesc[i]);
-  }
+    if (runInfo.dataIdGM)
+      printf("\n Data ID %d found for Gretina4M data\n", runInfo.dataIdGM);
+    if (runInfo.dataIdGA)
+      printf("\n Data ID %d found for Gretina4A data\n", runInfo.dataIdGA);
+    printf(" Run number: %d in file %s\n"
+           " Start time: %s  (%d)\n"
+           " Run bits  : %d = 0x%8.8x\n",
+           runInfo.runNumber, runInfo.filename, runInfo.date, runInfo.startTime,
+           runInfo.runType, runInfo.runType);
+    for (i=0; i<32; i++) {
+      if (runInfo.runType & 1<<i) printf("  0x%8.8x - %s\n", 1<<i, runBitDesc[i]);
+    }
 
-  if (VERBOSE) {
-    printf(" Quickstart: %d\n"
-           " Ref   time: %d\n"
-           " ORCA setup: %s\n"
-           " %d dataIds:\n",
-           runInfo.quickStart, runInfo.refTime, runInfo.orcaname, runInfo.idNum);
-    for (i=0; i<runInfo.idNum; i++)
-      printf("  %2d  %s\n", runInfo.dataId[i], runInfo.decoder[i]);
-  }
+    if (VERBOSE) {
+      printf(" Quickstart: %d\n"
+             " Ref   time: %d\n"
+             " ORCA setup: %s\n"
+             " %d dataIds:\n",
+             runInfo.quickStart, runInfo.refTime, runInfo.orcaname, runInfo.idNum);
+      for (i=0; i<runInfo.idNum; i++)
+        printf("  %2d  %s\n", runInfo.dataId[i], runInfo.decoder[i]);
+    }
+  }      // if (!runInfo.flashcam) {
 
   for (i=0; i<nDets; i++)
     if (detInfo[i].HGChEnabled || detInfo[i].LGChEnabled) nEnab++;

@@ -19,6 +19,8 @@ int main(int argc, char **argv) {
   MJDetInfo  Dets[NMJDETS];
   MJRunInfo  runInfo;
   int        argn=1;
+  char       *c, data_file_name[256], list_file_name[256];
+  FILE       *f_in = NULL, *f_file_list = NULL;
 
 
   if (argc < 2) {
@@ -27,13 +29,30 @@ int main(int argc, char **argv) {
   }
   /* open raw data file as input */
   while (argn < argc && argv[argn][0] == '-') argn += 2;
-  FILE *f_in = fopen(argv[argn],"r");
+  if (strstr(argv[argn], ".lis")) {
+    /* input file name is a .lis file, contaning more than one data file name */
+    printf("Reading list of input data files from list file %s\n", list_file_name);
+    strncpy(list_file_name, argv[argn], sizeof(list_file_name));
+    if (!(f_file_list = fopen(list_file_name, "r"))) {
+      fprintf(stderr, "\n Failed to open input file %s\n", list_file_name);
+      return 0;
+    }
+    if (!fgets(data_file_name, sizeof(data_file_name), f_file_list)) {
+      fprintf(stderr, "\n Failed to read input file %s\n", list_file_name);
+      return 0;
+    }
+    for (c = data_file_name + strlen(data_file_name); *c < '0'; c--) *c = 0;  // removing trailing junk
+  } else {
+    strncpy(data_file_name, argv[argn], sizeof(data_file_name));
+  }
+
+  f_in = fopen(data_file_name, "r");
   if (f_in == NULL) {
-    fprintf(stderr, "\n Failed to open input file %s\n", argv[argn]);
+    fprintf(stderr, "\n Failed to open input file %s\n", data_file_name);
     return 0;
   }
-  printf("\n >>> Reading %s\n\n", argv[argn]);
-  strncpy(runInfo.filename, argv[argn], 256);
+  printf("\n >>> Reading %s\n\n", data_file_name);
+  strncpy(runInfo.filename, data_file_name, 256);
   runInfo.argc = argc;
   runInfo.argv = argv;
 
@@ -181,82 +200,104 @@ int main(int argc, char **argv) {
   // start loop over reading events from input file
 
   while (1) {
-    int evlen = 0, crate=0, slot=0, board_type = 0;
+    int evlen = 0, crate=0, slot=0, board_type = 0, last_read = 0;
+    long long int time = 0;
     chan = -1;
 
-    if (runInfo.flashcam) {
-      while ((j = fread(&k, sizeof(int), 1, f_in)) == 1 && k < 1200) {
+    if (runInfo.flashcam) {  // ----- flashcam data
+      while ((last_read = fread(&k, sizeof(int), 1, f_in)) == 1 && k < 1200) {
         if (k > 1) {
-          if (fread(evtdat, k, 1, f_in) != 1) break;
+          if ((last_read = fread(evtdat, k, 1, f_in)) != 1) break;
         }
       }
-      if (j != 1) break;  // end of data
       evlen = k/4 + 2;
       chan = 0;
 
-    } else {
-      if (fread(head, sizeof(head), 1, f_in) != 1) break;
-      board_type = head[0] >> 18;
-      evlen = (head[0] & 0x3ffff);
+    } else {  // ----- not flashcam data
+      if ((last_read = fread(head, sizeof(head), 1, f_in)) == 1) {
+        board_type = head[0] >> 18;
+        evlen = (head[0] & 0x3ffff);
 
-      if (board_type == 0) {  // a new runfile header! file must be corrupt?
-        printf("\n >>>> ERROR: DataID = 0; found a second file header??"
-               " Ending scan of this file!\n"
-               " >>>> head = %8.8x %8.8x  evlen = %d\n", head[0], head[1], evlen);
-        break;
-      }
-
-      /* if we don't want to decode this type of data, just skip forward in the file */
-      if (board_type != runInfo.dataIdGM &&
-          board_type != runInfo.dataIdGA) {
-        if (evlen > 10000) {
-          printf("\n >>>> ERROR: Event length too long??  board_type = %d, length = %d\n"
-                 " >>>> This file is probably corruped, ending scan!\n", board_type, evlen);
+        if (board_type == 0) {  // a new runfile header! file must be corrupt?
+          printf("\n >>>> ERROR: DataID = 0; found a second file header??"
+                 " Ending scan of this file!\n"
+                 " >>>> head = %8.8x %8.8x  evlen = %d\n", head[0], head[1], evlen);
           break;
         }
-        fseek(f_in, 4*(evlen-2), SEEK_CUR);
-        continue;
-      }
 
-      slot  = (head[1] >> 16) & 0x1f;
-      crate = (head[1] >> 21) & 0xf;
-      if (crate < 0 || crate > NCRATES ||
-          slot  < 0 || slot > 20) {
-        printf("ERROR: Illegal VME crate or slot number %d %d\n", crate, slot);
-        if (fread(evtdat, sizeof(int), evlen-2, f_in) != evlen-2) break;
-        continue;
+        /* if we don't want to decode this type of data, just skip forward in the file */
+        if (board_type != runInfo.dataIdGM &&
+            board_type != runInfo.dataIdGA) {
+          if (evlen > 10000) {
+            printf("\n >>>> ERROR: Event length too long??  board_type = %d, length = %d\n"
+                   " >>>> This file is probably corruped, ending scan!\n", board_type, evlen);
+            break;
+          }
+          fseek(f_in, 4*(evlen-2), SEEK_CUR);
+          continue;
+        }
+
+        slot  = (head[1] >> 16) & 0x1f;
+        crate = (head[1] >> 21) & 0xf;
+        if (crate < 0 || crate > NCRATES ||
+            slot  < 0 || slot > 20) {
+          printf("ERROR: Illegal VME crate or slot number %d %d\n", crate, slot);
+          if (fread(evtdat, sizeof(int), evlen-2, f_in) != evlen-2) break;
+          continue;
+        }
       }
-    }
+    }   // -------- if (flashcam) {} else {
 
     /* ========== read in the rest of the event data ========== */
-    if (fread(evtdat, sizeof(int), evlen-2, f_in) != evlen-2) {
-      printf("  No more data...\n");
-      break;
-    }
-    int ch = (evtdat[1] & 0xf);
-    if ((j = module_lu[crate][slot]) < 0 || ch >= 10) continue;
-    chan = chan_lu[j][ch];
-    if (chan > 99 + runInfo.nGe && chan < 100 + runInfo.nGe + runInfo.nPT) continue; // pulser tag channels
-    if (chan < 0 || chan > 99 + runInfo.nGe + runInfo.nPT ||
-        ((chan < 100 && !Dets[chan].HGChEnabled) ||
-         (chan > 99 && !Dets[chan-100].LGChEnabled))) {
-      printf("Data from detector not enabled! Chan = %d  crate, slot, j, ch = %d %d %d %d  len = %d\n",
-             chan, crate, slot, module_lu[crate][slot], ch, evlen);
+    if (last_read != 1 || fread(evtdat, sizeof(int), evlen-2, f_in) != evlen-2) {
+      /* if no more data, *break* to go to histgram processing
+         or read a new file name from the list file to open a new data file */
+      printf("\n  No more data in file %s\n\n", data_file_name);
+      fclose(f_in);
+      if (!f_file_list) break;
+      if (!fgets(data_file_name, sizeof(data_file_name), f_file_list)) {
+        printf("   End of list file %s\n\n", list_file_name);
+        break;
+      }
+      for (c = data_file_name + strlen(data_file_name); *c < '0'; c--) *c = 0;  // removing trailing junk
+      f_in = fopen(data_file_name, "r");
+      if (f_in == NULL) {
+        fprintf(stderr, "     Failed to open new input file %s\n\n", data_file_name);
+        break;
+      }
+      fseek(f_in, 4*runInfo.fileHeaderLen, SEEK_SET);  // go to start of data in input file
+      printf(" >>> Reading %s\n\n", data_file_name);
       continue;
     }
-
     if (++totevts % 50000 == 0) {   
       printf(" %8d evts in, %d out, %d saved\n", totevts, out_evts, isd); fflush(stdout);
     }
-    if (chan < clo || chan > chi) continue;
 
-    long long int time = 0;
-    if (runInfo.flashcam) {
-      /* --------------- FlashCam digitizer data ---------------- */
+    if (runInfo.flashcam) {  // ----- flashcam data
+
+      if (chan < clo || chan > chi) continue;
       sig_len = 2*(evlen-2);
       signal = (short *) evtdat;
 
-    } else {
+    } else {  // ----- not flashcam data
+
+      int ch = (evtdat[1] & 0xf);
+      if ((j = module_lu[crate][slot]) < 0 || ch >= 10) continue;
+      chan = chan_lu[j][ch];
+      if (chan > 99 + runInfo.nGe && chan < 100 + runInfo.nGe + runInfo.nPT) continue; // pulser tag channels
+      if (chan < 0 || chan > 99 + runInfo.nGe + runInfo.nPT ||
+          ((chan < 100 && !Dets[chan].HGChEnabled) ||
+           (chan > 99 && !Dets[chan-100].LGChEnabled))) {
+        printf("Data from detector not enabled! Chan = %d  crate, slot, j, ch = %d %d %d %d  len = %d\n",
+               chan, crate, slot, module_lu[crate][slot], ch, evlen);
+        continue;
+      }
+
+      if (++totevts % 50000 == 0) {   
+        printf(" %8d evts in, %d out, %d saved\n", totevts, out_evts, isd); fflush(stdout);
+      }
+      if (chan < clo || chan > chi) continue;
+
       /* --------------- Gretina4M or 4A digitizer data ---------------- */
       time = (evtdat[3] & 0xffff);
       time = time << 32 | evtdat[2];
@@ -304,7 +345,7 @@ int main(int argc, char **argv) {
           printf("Corrected chan %d for presumming at step %d, sig_len = %d\n",
                  chan, step, sig_len);
       }
-    }
+    }   // -------- if (flashcam) {} else {
 
     int e = trap_max(signal, &j, TRAP_RISE, TRAP_FLAT)/TRAP_RISE;
     if (runInfo.flashcam) e /= 2;

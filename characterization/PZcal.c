@@ -41,7 +41,9 @@ int main(int argc, char **argv) {
   int nDets = decode_runfile_header(f_in, detInfo, &runInfo);
   if (nDets < 1) return 1;
 
-  if (!runInfo.flashcam) {
+  if (runInfo.flashcam) {
+    printf("FlashCam data; assuming only one detector.\n");
+  } else {
     if (runInfo.dataIdGM == 0 && runInfo.dataIdGA == 0)
       printf("\n No data ID found for Gretina4M or 4A data!\n");
     if (runInfo.dataIdGM)
@@ -183,19 +185,32 @@ void signalselect(FILE *f_in, MJDetInfo *Dets, MJRunInfo *runInfo, int step) {
 
   while (1) {
     int evlen = 0, crate=0, slot=0, board_type = 0;
+    long long int time = 0;
     chan = -1;
 
-    if (runInfo->flashcam) {
+    if (runInfo->flashcam) {  // ----- flashcam data
       while ((j = fread(&k, sizeof(int), 1, f_in)) == 1 && k < 1200) {
         if (k > 1) {
           if (fread(evtdat, k, 1, f_in) != 1) break;
         }
       }
-      if (j != 1) break;  // end of data
       evlen = k/4 + 2;
       chan = 0;
 
-    } else {
+      /* ========== read in the rest of the event data ========== */
+      if (j != 1 || fread(evtdat, sizeof(int), evlen-2, f_in) != evlen-2) {
+        printf("  No more data...\n");
+        break;
+      }
+      if (++totevts % 50000 == 0) {
+        printf(" %8d evts in, %d out\n", totevts, out_evts); fflush(stdout);
+      }
+
+      if (chan < clo || chan > chi) continue;
+      sig_len = 2*(evlen-2);
+      signal = (short *) evtdat;
+
+    } else {  // ----- not flashcam data
       if (fread(head, sizeof(head), 1, f_in) != 1) break;
       board_type = head[0] >> 18;
       evlen = (head[0] & 0x3ffff);
@@ -227,37 +242,28 @@ void signalselect(FILE *f_in, MJDetInfo *Dets, MJRunInfo *runInfo, int step) {
         if (fread(evtdat, sizeof(int), evlen-2, f_in) != evlen-2) break;
         continue;
       }
-    }
 
-    /* ========== read in the rest of the event data ========== */
-    if (fread(evtdat, sizeof(int), evlen-2, f_in) != evlen-2) {
-      printf("  No more data...\n");
-      break;
-    }
-    int ch = (evtdat[1] & 0xf);
-    if ((j = module_lu[crate][slot]) >= 0 && ch < 10) chan = chan_lu[j][ch];
-    if (chan > 99 + runInfo->nGe && chan < 100 + runInfo->nGe + runInfo->nPT) continue; // pulser tag channels
-    if (chan < 0 || chan > 99 + runInfo->nGe + runInfo->nPT ||
-        ((chan < 100 && !Dets[chan].HGChEnabled) ||
-         (chan > 99 && !Dets[chan-100].LGChEnabled))) {
-      printf("Data from detector not enabled! Chan = %d  crate, slot, j, ch = %d %d %d %d  len = %d\n",
-             chan, crate, slot, module_lu[crate][slot], ch, evlen);
-      continue;
-    }
+      /* ========== read in the rest of the event data ========== */
+      if (fread(evtdat, sizeof(int), evlen-2, f_in) != evlen-2) {
+        printf("  No more data...\n");
+        break;
+      }
+      int ch = (evtdat[1] & 0xf);
+      if ((j = module_lu[crate][slot]) >= 0 && ch < 10) chan = chan_lu[j][ch];
+      if (chan > 99 + runInfo->nGe && chan < 100 + runInfo->nGe + runInfo->nPT) continue; // pulser tag channels
+      if (chan < 0 || chan > 99 + runInfo->nGe + runInfo->nPT ||
+          ((chan < 100 && !Dets[chan].HGChEnabled) ||
+           (chan > 99 && !Dets[chan-100].LGChEnabled))) {
+        printf("Data from detector not enabled! Chan = %d  crate, slot, j, ch = %d %d %d %d  len = %d\n",
+               chan, crate, slot, module_lu[crate][slot], ch, evlen);
+        continue;
+      }
 
-    if (++totevts % 50000 == 0) {
-      printf(" %8d evts in, %d out\n", totevts, out_evts); fflush(stdout);
-    }
-    if (chan < clo || chan > chi) continue;
+      if (++totevts % 50000 == 0) {
+        printf(" %8d evts in, %d out\n", totevts, out_evts); fflush(stdout);
+      }
+      if (chan < clo || chan > chi) continue;
 
-    long long int time = 0;
-    if (runInfo->flashcam) {
-      /* --------------- FlashCam digitizer data ---------------- */
-      sig_len = 2*(evlen-2);
-      signal = (short *) evtdat;
-      // fwrite(signal, 2*sig_len, 1, f_mat);
-
-    } else {
       /* --------------- Gretina4M or 4A digitizer data ---------------- */
       time = (evtdat[3] & 0xffff);
       time = time << 32 | evtdat[2];
@@ -305,7 +311,7 @@ void signalselect(FILE *f_in, MJDetInfo *Dets, MJRunInfo *runInfo, int step) {
           printf("Corrected chan %d for presumming at step %d, sig_len = %d\n",
                  chan, sstep, sig_len);
       }
-    }
+    }   // -------- if (flashcam) {} else {
 
     int e = trap_max(signal, &j, TRAP_RISE, TRAP_FLAT)/TRAP_RISE;
     if (runInfo->flashcam) e /= 2;

@@ -8,7 +8,7 @@ RM = rm -f
 # common files and headers
 mk_source_files = sortrun.c decode_runfile_header.c eventbuild.c ep_util.c
 mk_header_files = MJDSort.h runBits.h
-all_programs = pulser_tag_init presort PZcal skim skim_opt CTcal PSAcal \
+all_programs = pulser_tag_init presort PZcal skim skim_opt CTcal PSAcal sortskim \
                sortrun rundiff rundiff2 siginspect threshold threshold2 \
                sumrms run_check prebuild inlcheck \
                compress decompress  compress_fcio decompress_fcio deadtime enr_rms
@@ -34,6 +34,9 @@ CTcal:  $(mk_header_files) CTcal.c decode_runfile_header.c ep_util.c
 
 PSAcal: $(mk_header_files) PSAcal.c  decode_runfile_header.c ep_util.c
 	$(CC) $(CFLAGS) -o $@ PSAcal.c decode_runfile_header.c ep_util.c -lm
+
+sortskim: $(mk_header_files) sortskim.c  ep_util.c
+	$(CC) $(CFLAGS) -o $@ sortskim.c decode_runfile_header.c ep_util.c -lm
 
 sortrun: $(mk_source_files) $(mk_header_files) eventprocess.c ep_finalize.c pz_fitter.c
 	$(CC) $(CFLAGS) -D DO_PSA -o $@ $(mk_source_files) eventprocess.c ep_finalize.c pz_fitter.c -lm

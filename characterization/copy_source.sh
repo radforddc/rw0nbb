@@ -9,5 +9,6 @@ cp -a ../mjd/eventprocess.c .
 cp -a ../mjd/pz_fitter.c .
 cp -a ../mjd/siginspect.c .
 cp -a ../mjd/skim.c .
+cp -a ../mjd/sortskim.c .
 cp -a ../mjd/sortrun.c .
 cp -a ../mjd/runBits.h .

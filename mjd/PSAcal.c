@@ -698,7 +698,7 @@ int main(int argc, char **argv) {
   for (i=0; i<HIS_COUNT; i++) {
    char spname[256];
     if (i < 200) {
-      sprintf(spname, "%d; ch %d A/; raw, norm, DT-corrected, DT- and E-correct; run %d", i, i, runInfo.runNumber);
+      sprintf(spname, "%d; ch %d A/E; raw, norm, DT-corrected, DT- and E-correct; run %d", i, i, runInfo.runNumber);
     } else if (i < 400) {
       sprintf(spname, "%d; ch %d A/E DT-corrected with test factors", i, i%200);
     } else if (i < 600) {
