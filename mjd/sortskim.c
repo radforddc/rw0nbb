@@ -284,5 +284,7 @@ int main(int argc, char **argv) {
   }
   fclose(f_out);
 
+  if (mean_dcr_ready  < 0)
+    printf("\n WARNING; no INL_DCR_input.sec was read; maybe mv INL_DCR_output.sec INL_DCR_input.sec ?\n\n"); 
   return 0;
 }

@@ -1963,7 +1963,7 @@ int checkGranularity(MJDetInfo *Dets, MJRunInfo *runInfo,
                      int nChData, BdEvent *ChData[]) {
   
   int      i, ievt, chan;
-  int      chan_list[200];     // list of detectors/channels
+  int      chan_list[200];     // list of hit detectors/channels in the event
   int      nchan=0, ndet=0;
   
   /* LOOP over channel-events in the built-event */
@@ -1976,11 +1976,12 @@ int checkGranularity(MJDetInfo *Dets, MJRunInfo *runInfo,
       chan_list[nchan++] = chan = ChData[ievt]->chan;
 
       for (i=0; i<nchan-1; i++)
-        if (chan_list[i]%100 == chan%100) break;  // aleady saw this detector
+        if (chan_list[i]%100 == chan%100) break;  // already saw this detector
       if (i == nchan-1) ndet++;   // this detector _not_ yet seen
     }
   }
   // if (ndet > 2) printf(" nChData, ndet: %d %d\n", nChData, ndet);
+  if (ndet <= 0) return 0;
   return ndet-1;
 } /* checkGranularity */
 

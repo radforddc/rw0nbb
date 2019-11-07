@@ -645,7 +645,7 @@ int eventprocess(MJDetInfo *Dets, MJRunInfo *runInfo, int nChData, BdEvent *ChDa
       }
       if (GRAN_CUT && granularity) dirty_sig += 32;
 
-#ifndef DO_PSA    // ifdef DO_PSA, use e_adc and e_ctc, further below
+#ifndef DO_PSA    // this part is for NOT DO_PSA; ifdef DO_PSA, use e_adc and e_ctc, further below
       j = e_trapmax;
       if (chan < runInfo->nGe) {
         j = ChData[ievt]->e * Dets[chan].HGcalib[0] * 2.0;
@@ -854,14 +854,10 @@ int eventprocess(MJDetInfo *Dets, MJRunInfo *runInfo, int nChData, BdEvent *ChDa
           fprintf(f_evl, "%3d %7.1f %15lld %d%d%d.%d%d%d%d.%d%d%d%d",
                   chan, e_ctc, time, lamda_good, dcr_good, a_e_good,
                   DBIT(7), DBIT(6), DBIT(5), DBIT(4), DBIT(3), DBIT(2), DBIT(1), DBIT(0));
-          if (chan > 99)
-            fprintf(f_evl, " %s LG Q0  %8.1f %6.1f %6.1f   %d %3d %3d  %8.2f %6.2f %6.2f\n",
-                    Dets[chan-100].StrName, aovere, dcr, lamda, runInfo->runNumber, t90-t0, t100-t90,
-                    aovere - PSA.ae_cut[chan], dcr - PSA.dcr_lim[chan], lamda - PSA.lamda_lim[chan]);
-          else
-            fprintf(f_evl, " %s HG Q0  %8.1f %6.1f %6.1f   %d %3d %3d  %8.2f %6.2f %6.2f\n",
-                    Dets[chan].StrName, aovere, dcr, lamda, runInfo->runNumber, t90-t0, t100-t90,
-                    aovere - PSA.ae_cut[chan], dcr - PSA.dcr_lim[chan], lamda - PSA.lamda_lim[chan]);
+          fprintf(f_evl, " %s %cG Q0  %8.1f %6.1f %6.1f   %d %3d %3d  %8.2f %6.2f %6.2f\n",
+                  Dets[chan%100].StrName, (chan > 99 ? 'L' : 'H'),
+                  aovere, dcr, lamda, runInfo->runNumber, t90-t0, t100-t90,
+                  aovere - PSA.ae_cut[chan], dcr - PSA.dcr_lim[chan], lamda - PSA.lamda_lim[chan]);
         }
 
       } else if (!bad[ievt] && !pulser) {     // CLEAN non-pulser signals
@@ -961,20 +957,14 @@ int eventprocess(MJDetInfo *Dets, MJRunInfo *runInfo, int nChData, BdEvent *ChDa
           fprintf(f_evl, "%3d %7.1f %15lld %d%d%d.%d%d%d%d.%d%d%d%d",
                   chan, e_ctc, time, lamda_good, dcr_good, a_e_good,
                   DBIT(7), DBIT(6), DBIT(5), DBIT(4), DBIT(3), DBIT(2), DBIT(1), DBIT(0));
-          if (chan > 99)
-            fprintf(f_evl, " %s LG Q%d  %8.1f %6.1f %6.1f   %d %3d %3d  %8.2f %6.2f %6.2f\n",
-                    Dets[chan-100].StrName, a_e_good + 2*dcr_good + 4*lamda_good,
-                    aovere, dcr, lamda, runInfo->runNumber, t90-t0, t100-t90,
-                    aovere - PSA.ae_cut[chan], dcr - PSA.dcr_lim[chan], lamda - PSA.lamda_lim[chan]);
-          else
-            fprintf(f_evl, " %s HG Q%d  %8.1f %6.1f %6.1f   %d %3d %3d  %8.2f %6.2f %6.2f\n",
-                    Dets[chan].StrName, a_e_good + 2*dcr_good + 4*lamda_good,
-                    aovere, dcr, lamda, runInfo->runNumber, t90-t0, t100-t90,
-                    aovere - PSA.ae_cut[chan], dcr - PSA.dcr_lim[chan], lamda - PSA.lamda_lim[chan]);
+          fprintf(f_evl, " %s %cG Q%d  %8.1f %6.1f %6.1f   %d %3d %3d  %8.2f %6.2f %6.2f\n",
+                  Dets[chan%100].StrName, (chan > 99 ? 'L' : 'H'), a_e_good + 2*dcr_good + 4*lamda_good,
+                  aovere, dcr, lamda, runInfo->runNumber, t90-t0, t100-t90,
+                  aovere - PSA.ae_cut[chan], dcr - PSA.dcr_lim[chan], lamda - PSA.lamda_lim[chan]);
         }
       }
       // ----------------------------------------------------------------
-#endif
+#endif  // end if #ifdef DO_PSA
 
       /* write out good (or selected) signals */
 #ifndef QUIET
@@ -1040,7 +1030,7 @@ int eventprocess(MJDetInfo *Dets, MJRunInfo *runInfo, int nChData, BdEvent *ChDa
     if (bad[ievt]) {  // bad event, not just dirty/cleaned
       badevts++;
       badevts_bytype[bad[ievt]]++;
-      return 2;
+      //  return 2;  // if we return here, then most dirty and granularity events don't make it into the eventlist
     }
 
   } // END of loop over channel-events

@@ -336,7 +336,7 @@ void signalselect(FILE *f_in, MJDetInfo *Dets, MJRunInfo *runInfo) {
         }
       }
 
-      if (!erro &&
+      if (// !erro &&
           (e1 < elo || e1 > ehi) &&
           !tsmatch) continue;
       out_evts++;
