@@ -83,7 +83,7 @@ void signalselect(FILE *f_in, MJDetInfo *Dets, MJRunInfo *runInfo, int step) {
 
   int    i, j, k, chan, sig_len;
   FILE   *f_out;
-  FILE   *f_mat;
+  //FILE   *f_mat;
   int    t90, t100, bl;
   float  pos, area, fwhm;
 
@@ -98,7 +98,7 @@ void signalselect(FILE *f_in, MJDetInfo *Dets, MJRunInfo *runInfo, int step) {
   */
   printf(" >>> Step %d of 2 <<<\n", step); fflush(stdout);
   if (step == 1) {
-    f_mat = fopen("s.mat", "w");
+    //f_mat = fopen("s.mat", "w");
     /* initialize */
     /* malloc and clear histogram space */
     if ((his[0] = calloc(HIS_COUNT*8192, sizeof(int))) == NULL) {
@@ -422,7 +422,7 @@ void signalselect(FILE *f_in, MJDetInfo *Dets, MJRunInfo *runInfo, int step) {
     } else {
       for (i=10; i<sig_len; i++) fsignal[i] = signal[i];
     }
-    fwrite(signal, sizeof(short), sig_len, f_mat);
+    //fwrite(signal, sizeof(short), sig_len, f_mat);
 
     /* do fitting of pole-zero parameters (decay time and fraction_2) */
 
