@@ -7,7 +7,7 @@ RM = rm -f
 
 # common files and headers
 mk_header_files = MJDSort.h
-all_programs = PZcal skim skim_opt CTcal PSAcal sortskim sortrun
+all_programs = PZcal skim skim_opt CTcal PSAcal sortskim sortrun preflash
 #               siginspect
 
 
@@ -38,6 +38,9 @@ sortrun: $(mk_header_files) sortrun.c decode_runfile_header.c eventbuild.c ep_ut
 
 siginspect: $(mk_header_files) siginspect.c decode_runfile_header.c ep_util.c
 	$(CC) $(CFLAGS) -o $@ siginspect.c decode_runfile_header.c ep_util.c -lm
+
+preflash: $(mk_header_files) preflash.c decode_runfile_header.c ep_util.c
+	$(CC) $(CFLAGS) -o $@ preflash.c decode_runfile_header.c ep_util.c -lm
 
 FORCE:
 

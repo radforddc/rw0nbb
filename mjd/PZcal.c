@@ -43,6 +43,8 @@ int main(int argc, char **argv) {
 
   if (runInfo.flashcam) {
     printf("FlashCam data; assuming only one detector.\n");
+    if (runInfo.flashcam < 2)
+      printf("\nNOTE: I suggest you first run preflash on (a list of) your files.\n\n");
   } else {
     if (runInfo.dataIdGM == 0 && runInfo.dataIdGA == 0)
       printf("\n No data ID found for Gretina4M or 4A data!\n");
@@ -80,7 +82,8 @@ void signalselect(FILE *f_in, MJDetInfo *Dets, MJRunInfo *runInfo, int step) {
   float  fsignal[8192] = {0};
 
   int    i, j, k, chan, sig_len;
-  FILE   *f_out; //, *f_mat;
+  FILE   *f_out;
+  FILE   *f_mat;
   int    t90, t100, bl;
   float  pos, area, fwhm;
 
@@ -95,7 +98,7 @@ void signalselect(FILE *f_in, MJDetInfo *Dets, MJRunInfo *runInfo, int step) {
   */
   printf(" >>> Step %d of 2 <<<\n", step); fflush(stdout);
   if (step == 1) {
-    // f_mat = fopen("s.mat", "w");
+    f_mat = fopen("s.mat", "w");
     /* initialize */
     /* malloc and clear histogram space */
     if ((his[0] = calloc(HIS_COUNT*8192, sizeof(int))) == NULL) {
@@ -188,29 +191,54 @@ void signalselect(FILE *f_in, MJDetInfo *Dets, MJRunInfo *runInfo, int step) {
     long long int time = 0;
     chan = -1;
 
-    if (runInfo->flashcam) {  // ----- flashcam data
-      while ((j = fread(&k, sizeof(int), 1, f_in)) == 1 && k < 1200) {
-        if (k > 1) {
-          if (fread(evtdat, k, 1, f_in) != 1) break;
+    if (runInfo->flashcam) {  // ----- flashcam data -----
+      chan = 0;
+      if (chan < clo || chan > chi) continue;
+
+      if (runInfo->flashcam < 2) {  // not presorted
+        int last_read;
+        while ((last_read = fread(&k, sizeof(int), 1, f_in)) == 1 && k < 1200) {
+          if (k > 1) {
+            if (fread(evtdat, k, 1, f_in) != 1) break;
+          }
+        }
+        evlen = k/4 + 2;
+        /*  read in the rest of the event data  */
+        if (last_read != 1 || fread(evtdat, sizeof(int), evlen-2, f_in) != evlen-2) {
+          printf("  No more data...\n");
+          break;
+        }
+        sig_len = 2*(evlen-2);
+        signal = (short *) evtdat;
+        for (i=0; i < sig_len; i++) signal[i] = ((unsigned short) signal[i]) / 4 - 8192;
+        // if rising edge comes too late in signal, trapmax will fail
+        if (sig_len > 2400) {
+          signal  += (sig_len-2400)/2;
+          sig_len -= (sig_len-2400)/2;
+        }
+      } else {        // presorted data, contains only waveforms
+        if (fread(sigu,  sizeof(short), 2, f_in) != 2 ||
+            fread(siguc, sizeof(short), sigu[0], f_in) != sigu[0]) {
+          printf("  No more data...\n");
+          break;
+        }
+        i = sigu[0];            // compressed length
+        j = sig_len = sigu[1];  // uncompressed length
+        signal = siguc;
+        if (i != j) {
+          sig_len = decompress_signal((unsigned short *)siguc, sigu, i);
+          signal = sigu;
+        }
+        if (j != sig_len) {
+          printf("\nERROR decompressing signal; sig_len %d != %d\n", sig_len, j);
+          return;
         }
       }
-      evlen = k/4 + 2;
-      chan = 0;
 
-      /* ========== read in the rest of the event data ========== */
-      if (j != 1 || fread(evtdat, sizeof(int), evlen-2, f_in) != evlen-2) {
-        printf("  No more data...\n");
-        break;
-      }
-      if (++totevts % 50000 == 0) {
+      if (++totevts % 50000 == 0)
         printf(" %8d evts in, %d out\n", totevts, out_evts); fflush(stdout);
-      }
 
-      if (chan < clo || chan > chi) continue;
-      sig_len = 2*(evlen-2);
-      signal = (short *) evtdat;
-
-    } else {  // ----- not flashcam data
+    } else {  // ----- not flashcam data -----
       if (fread(head, sizeof(head), 1, f_in) != 1) break;
       board_type = head[0] >> 18;
       evlen = (head[0] & 0x3ffff);
@@ -311,40 +339,44 @@ void signalselect(FILE *f_in, MJDetInfo *Dets, MJRunInfo *runInfo, int step) {
           printf("Corrected chan %d for presumming at step %d, sig_len = %d\n",
                  chan, sstep, sig_len);
       }
+
+      /* sticky-bit fix */
+      int d = 128;  // basically a sensitivity threshold; max change found will be d/2
+      if (chan > 99 && chan < 100+runInfo->nGe) d = 64;
+      for (i=20; i<2000; i++) {
+        // calculate second derivatives
+        int dd0 = abs((int) signal[i+1] - 2*((int) signal[i]) + (int) signal[i-1]);
+        int dd1 = abs((int) signal[i+2] - 2*((int) signal[i+1]) + (int) signal[i]);
+        if (dd0 > d && dd0 > dd1 && dd0 > abs(signal[i+1] - signal[i-1])) {
+          // possible occurrence; make sure it's not just high-frequency noise
+          for (k=i-8; k<i+8; k++) {
+            if (k==i-1 || k==i || k == i+1) continue;
+            dd1 = abs((int) signal[k+1] - 2*((int) signal[k]) + (int) signal[k-1]);
+            if (dd0 < dd1*3) break;
+          }
+          if (k<i+8) continue;
+          dd0 = (int) signal[i+1] - 2*((int) signal[i]) + (int) signal[i-1];
+          j = lrintf((float) dd0 / (float) d);
+          printf("Fixing sticky bit in signal %d, chan %d, t=%d, change %d\n",
+                 out_evts-1, chan, i, j*d/2);
+          signal[i] += j*d/2;
+          // break;
+        }
+      }
     }   // -------- if (flashcam) {} else {
 
     int e = trap_max(signal, &j, TRAP_RISE, TRAP_FLAT)/TRAP_RISE;
     if (runInfo->flashcam) e /= 2;
+
+    his[100][e]++;
     if (chan < 100 && (e < elo || e > ehi)) continue;
     if (chan > 99 && (e < elo/3.4 || e > ehi/3.2)) continue;
+    his[110][e]++;
     out_evts++;
 
-    /* sticky-bit fix */
-    int d = 128;  // basically a sensitivity threshold; max change found will be d/2
-    if (chan > 99 && chan < 100+runInfo->nGe) d = 64;
-    for (i=20; i<2000; i++) {
-      // calculate second derivatives
-      int dd0 = abs((int) signal[i+1] - 2*((int) signal[i]) + (int) signal[i-1]);
-      int dd1 = abs((int) signal[i+2] - 2*((int) signal[i+1]) + (int) signal[i]);
-      if (dd0 > d && dd0 > dd1 && dd0 > abs(signal[i+1] - signal[i-1])) {
-        // possible occurrence; make sure it's not just high-frequency noise
-        for (k=i-8; k<i+8; k++) {
-          if (k==i-1 || k==i || k == i+1) continue;
-          dd1 = abs((int) signal[k+1] - 2*((int) signal[k]) + (int) signal[k-1]);
-          if (dd0 < dd1*3) break;
-        }
-        if (k<i+8) continue;
-        dd0 = (int) signal[i+1] - 2*((int) signal[i]) + (int) signal[i-1];
-        j = lrintf((float) dd0 / (float) d);
-        printf("Fixing sticky bit in signal %d, chan %d, t=%d, change %d\n",
-               out_evts-1, chan, i, j*d/2);
-        signal[i] += j*d/2;
-        // break;
-      }
-    }
 
     /* ---------------------- process selected signals ---------------------- */
-    if (sig_len > 2500) sig_len = 2500;   // FIXME
+    if (sig_len > 3500) sig_len = 3500;   // FIXME
 
     if (step == 1) {
       /* just get mean and RMS for baseline value */
@@ -357,10 +389,12 @@ void signalselect(FILE *f_in, MJDetInfo *Dets, MJRunInfo *runInfo, int step) {
       s1 /= 100.0;                   // mean baseline
       s2 = sqrt(s2/100.0 - s1*s1);   // RMS
       /* histogram mean baseline value (for new PZ.output) */
-      if (PZI.baseline[chan] == -9999)  // baselines unknown! use this first signal from chan as estimate.
+      if (PZI.baseline[chan] == -9999) {  // baselines unknown! use this first signal from chan as estimate.
         PZI.baseline[chan] = s1;
+        printf("Using BL of first signal (%.0f) as BL guess\n", s1);
+      }
       bl = s1 + 1000.5 - PZI.baseline[chan];
-      if (bl > 0 || bl < 1900) his[chan][bl]++;
+      if (bl > 0 && bl < 1900) his[chan][bl]++;
       if (s2 < 50.0) his[200+chan][(int)(10.0*s2 + 0.5)]++;
       continue;
     }
@@ -368,9 +402,9 @@ void signalselect(FILE *f_in, MJDetInfo *Dets, MJRunInfo *runInfo, int step) {
     // now do step 2 stuff
     /* find and histogram t100 and t90 */
     t100 = 700;                 // FIXME? arbitrary 700?
-    for (i = t100+1; i < 1500; i++)
+    for (i = t100+1; i < sig_len - 500; i++)
       if (signal[t100] < signal[i]) t100 = i;
-    if (t100 > 1300) continue;  // FIXME ??  - important for cleaning, gets rid of pileup
+    if (t100 > sig_len - 700) continue;  // FIXME ??  - important for cleaning, gets rid of pileup
     /* get mean baseline value */
     bl = 0;
     for (i=300; i<400; i++) bl += signal[i];
@@ -388,6 +422,7 @@ void signalselect(FILE *f_in, MJDetInfo *Dets, MJRunInfo *runInfo, int step) {
     } else {
       for (i=10; i<sig_len; i++) fsignal[i] = signal[i];
     }
+    fwrite(signal, sizeof(short), sig_len, f_mat);
 
     /* do fitting of pole-zero parameters (decay time and fraction_2) */
 
@@ -399,11 +434,11 @@ void signalselect(FILE *f_in, MJDetInfo *Dets, MJRunInfo *runInfo, int step) {
     if (chisq > 0.01) {       // fit successful
       if (chisq < 5.0) {      // good fit
         /* histogram fitted parameter values */
-        j = lamda1 * 4000000.0;
+        j = lamda1 * 3000000.0;
         if (j > 0 && j < 1500)   his[chan][j + 2000]++;  // 0.01/tau
         j = frac2 * 4000.0;
         if (j > -100 && j < 400) his[chan][j + 4000]++;  // frac2
-        j = lamda * 4000000.0;
+        j = lamda * 3000000.0;
         if (j > 0 && j < 1500)   his[chan][j + 4500]++;  // lamda
       }
       j = chisq * 100.0;
@@ -479,14 +514,14 @@ void signalselect(FILE *f_in, MJDetInfo *Dets, MJRunInfo *runInfo, int step) {
            chan, PZI.baseline[chan], PZI.tau[chan], 1.0/PZI.tau[chan]);
     fwhm = 5;
     // integrate over +- 1.0 FWHM
-    if ((pos = autopeak4(his[chan], 2010, 3400, 1.0f, &area, &fwhm)) && area > 100)
-      PZI.tau[chan] = 40000.0 / (pos-2000.0);
+    if ((pos = autopeak4(his[chan], 2010, 3500, 1.0f, &area, &fwhm)) && area > 100)
+      PZI.tau[chan] = 30000.0 / (pos-2000.0);
     // Use mode of distribution instead?
     j = 2010;
-    for (i=2011; i<3400; i++)
+    for (i=2011; i<3500; i++)
       if (his[chan][j] < his[chan][i]) j = i;  // mode of tau distribution
     if (his[chan][j] > 200) {
-      // PZI.tau[chan] = 40000.0 / (j-2000.0);
+      // PZI.tau[chan] = 30000.0 / (j-2000.0);
 
       printf(" %6.2f %9.5f ;  %8.5f -> ", PZI.tau[chan], 1.0/PZI.tau[chan], PZI.frac2[chan]);
     } else {

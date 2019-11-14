@@ -253,16 +253,21 @@ int decode_runfile_header(FILE *f_in, MJDetInfo *DetsReturn, MJRunInfo *runInfo)
 
   /* initialize a few things */
   runInfo->dataIdGM = runInfo->dataIdGA = runInfo->idNum = runInfo->nV = 0;
-  
-  /* read unformatted data and plist at start of orca file */
-  fread(buf, sizeof(buf), 1, f_in);
-  reclen = (unsigned int) buf[0];   // length of header in long words
-  reclen2 = (unsigned int) buf[1];  // length of header in bytes
-
-  /* ----------------FlashCam data setup------------------ */
   runInfo->flashcam = 0;
-  if (reclen == -1000000001 || strstr(((char *)buf) + 4, "FlashCam")) {
-    runInfo->flashcam = 1;
+
+  if (strstr(runInfo->filename, ".fciops")) { // presorted flashcam data, no header
+    runInfo->flashcam = 2;
+    reclen = reclen2 = 0;
+    runInfo->fileHeaderLen = 0;
+  } else {
+    /* read unformatted data and plist at start of orca file */
+    fread(buf, sizeof(buf), 1, f_in);
+    reclen = (unsigned int) buf[0];   // length of header in long words
+    reclen2 = (unsigned int) buf[1];  // length of header in bytes
+  }
+  /* ----------------FlashCam data setup------------------ */
+  if (runInfo->flashcam || reclen == -1000000001 || strstr(((char *)buf) + 4, "FlashCam")) {
+    if (!runInfo->flashcam) runInfo->flashcam = 1;
     sprintf(MJMDets[0].DetName, "Det00");  // detector name
     nMJDets = 1;
     MJMDets[0].type            = 2;
@@ -278,9 +283,10 @@ int decode_runfile_header(FILE *f_in, MJDetInfo *DetsReturn, MJRunInfo *runInfo)
     runInfo->nGD = 1;
     runInfo->nPT = 0;
     runInfo->nCC = 0;
-    runInfo->fileHeaderLen = 128/4;
-
-    fseek(f_in, 128, SEEK_SET);
+    if (runInfo->flashcam < 2) {
+      runInfo->fileHeaderLen = 128/4;
+      fseek(f_in, 128, SEEK_SET);
+    }
     return nMJDets;
   }
 

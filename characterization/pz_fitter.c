@@ -15,7 +15,7 @@
  */
 
 #define NP 3
-#define TRACE_LEN 3000
+#define TRACE_LEN 3500
 #define VERB 0
 
 int eval(float *pars, float *sig, int tlo, int thi, float *fit, float deriv[NP][TRACE_LEN]);

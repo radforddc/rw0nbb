@@ -60,7 +60,11 @@ int main(int argc, char **argv) {
   int nDets = decode_runfile_header(f_in, Dets, &runInfo);
   if (nDets < 1) return 1;
 
-  if (!runInfo.flashcam) {
+  if (runInfo.flashcam) {
+    printf("FlashCam data; assuming only one detector.\n");
+    if (runInfo.flashcam < 2)
+      printf("\nNOTE: I suggest you first run preflash on (a list of) your files.\n\n");
+  } else {
     if (runInfo.dataIdGM == 0 && runInfo.dataIdGA == 0)
       printf("\n No data ID found for Gretina4M or 4A data!\n");
     if (runInfo.dataIdGM)
@@ -199,19 +203,78 @@ int main(int argc, char **argv) {
   // end of initialization
   // start loop over reading events from input file
 
+  int last_read = 1;
   while (1) {
-    int evlen = 0, crate=0, slot=0, board_type = 0, last_read = 0;
+    int evlen = 0, crate=0, slot=0, board_type = 0;
     long long int time = 0;
     chan = -1;
 
-    if (runInfo.flashcam) {  // ----- flashcam data
-      while ((last_read = fread(&k, sizeof(int), 1, f_in)) == 1 && k < 1200) {
-        if (k > 1) {
-          if ((last_read = fread(evtdat, k, 1, f_in)) != 1) break;
+
+    if (last_read < 1) {
+      /* no more data in file; *break* to go to histgram processing
+         or read a new file name from the list file to open a new data file */
+      printf("\n  No more data in file %s\n\n", data_file_name);
+      fclose(f_in);
+      if (!f_file_list) break;
+      if (!fgets(data_file_name, sizeof(data_file_name), f_file_list)) {
+        printf("   End of list file %s\n\n", list_file_name);
+        break;
+      }
+      for (c = data_file_name + strlen(data_file_name); *c < '0'; c--) *c = 0;  // removing trailing junk
+      f_in = fopen(data_file_name, "r");
+      if (f_in == NULL) {
+        fprintf(stderr, "     Failed to open new input file %s\n\n", data_file_name);
+        break;
+      }
+      fseek(f_in, 4*runInfo.fileHeaderLen, SEEK_SET);  // go to start of data in input file
+      printf(" >>> Reading %s\n\n", data_file_name);
+    }
+
+    if (runInfo.flashcam) {  // ----- flashcam data -----
+      chan = 0;
+      if (chan < clo || chan > chi) continue;
+
+      if (runInfo.flashcam < 2) {  // not presorted
+        while ((last_read = fread(&k, sizeof(int), 1, f_in)) == 1 && k < 1200) {
+          if (k > 1) {
+            if ((last_read = fread(evtdat, k, 1, f_in)) != 1) continue;
+          }
+        }
+        evlen = k/4 + 2;
+        /*  read in the rest of the event data  */
+        if (last_read != 1 || (last_read = fread(evtdat, sizeof(int), evlen-2, f_in)) != evlen-2) {
+          printf("  No more data...\n");
+          continue;
+        }
+        sig_len = 2*(evlen-2);
+        signal = (short *) evtdat;
+        for (i=0; i < sig_len; i++) signal[i] = ((unsigned short) signal[i]) / 4 - 8192;
+        // if rising edge comes too late in signal, trapmax will fail
+        if (sig_len > 2400) {
+          signal  += (sig_len-2400)/2;
+          sig_len -= (sig_len-2400)/2;
+        }
+      } else {        // presorted data, contains only waveforms
+        if ((last_read = fread(sigu,  sizeof(short), 2, f_in)) != 2 ||
+            (last_read = fread(siguc, sizeof(short), sigu[0], f_in)) != sigu[0]) {
+          printf("  No more data...\n");
+          continue;
+        }
+        i = sigu[0];            // compressed length
+        j = sig_len = sigu[1];  // uncompressed length
+        signal = siguc;
+        if (i != j) {
+          sig_len = decompress_signal((unsigned short *)siguc, sigu, i);
+          signal = sigu;
+        }
+        if (j != sig_len) {
+          printf("\nERROR decompressing signal; sig_len %d != %d\n", sig_len, j);
+          return 1;
         }
       }
-      evlen = k/4 + 2;
-      chan = 0;
+      if (++totevts % 50000 == 0)
+        printf(" %8d evts in, %d out, %d saved\n", totevts, out_evts, isd); fflush(stdout);
+
 
     } else {  // ----- not flashcam data
       if ((last_read = fread(head, sizeof(head), 1, f_in)) == 1) {
@@ -242,44 +305,13 @@ int main(int argc, char **argv) {
         if (crate < 0 || crate > NCRATES ||
             slot  < 0 || slot > 20) {
           printf("ERROR: Illegal VME crate or slot number %d %d\n", crate, slot);
-          if (fread(evtdat, sizeof(int), evlen-2, f_in) != evlen-2) break;
+          last_read = fread(evtdat, sizeof(int), evlen-2, f_in);
           continue;
         }
       }
-    }   // -------- if (flashcam) {} else {
 
-    /* ========== read in the rest of the event data ========== */
-    if (last_read != 1 || fread(evtdat, sizeof(int), evlen-2, f_in) != evlen-2) {
-      /* if no more data, *break* to go to histgram processing
-         or read a new file name from the list file to open a new data file */
-      printf("\n  No more data in file %s\n\n", data_file_name);
-      fclose(f_in);
-      if (!f_file_list) break;
-      if (!fgets(data_file_name, sizeof(data_file_name), f_file_list)) {
-        printf("   End of list file %s\n\n", list_file_name);
-        break;
-      }
-      for (c = data_file_name + strlen(data_file_name); *c < '0'; c--) *c = 0;  // removing trailing junk
-      f_in = fopen(data_file_name, "r");
-      if (f_in == NULL) {
-        fprintf(stderr, "     Failed to open new input file %s\n\n", data_file_name);
-        break;
-      }
-      fseek(f_in, 4*runInfo.fileHeaderLen, SEEK_SET);  // go to start of data in input file
-      printf(" >>> Reading %s\n\n", data_file_name);
-      continue;
-    }
-    if (++totevts % 50000 == 0) {   
-      printf(" %8d evts in, %d out, %d saved\n", totevts, out_evts, isd); fflush(stdout);
-    }
-
-    if (runInfo.flashcam) {  // ----- flashcam data
-
-      if (chan < clo || chan > chi) continue;
-      sig_len = 2*(evlen-2);
-      signal = (short *) evtdat;
-
-    } else {  // ----- not flashcam data
+      /*  read in the rest of the event data  */
+      if (last_read != 1 || fread(evtdat, sizeof(int), evlen-2, f_in) != evlen-2) continue;  // no more data
 
       int ch = (evtdat[1] & 0xf);
       if ((j = module_lu[crate][slot]) < 0 || ch >= 10) continue;
@@ -345,6 +377,30 @@ int main(int argc, char **argv) {
           printf("Corrected chan %d for presumming at step %d, sig_len = %d\n",
                  chan, step, sig_len);
       }
+
+      /* sticky-bit fix */
+      int d = 128;  // basically a sensitivity threshold; max change found will be d/2
+      if (chan > 99 && chan < 100+runInfo.nGe) d = 64;
+      for (i=20; i<2000; i++) {
+        // calculate second derivatives
+        int dd0 = abs((int) signal[i+1] - 2*((int) signal[i]) + (int) signal[i-1]);
+        int dd1 = abs((int) signal[i+2] - 2*((int) signal[i+1]) + (int) signal[i]);
+        if (dd0 > d && dd0 > dd1 && dd0 > abs(signal[i+1] - signal[i-1])) {
+          // possible occurrence; make sure it's not just high-frequency noise
+          for (k=i-8; k<i+8; k++) {
+            if (k==i-1 || k==i || k == i+1) continue;
+            dd1 = abs((int) signal[k+1] - 2*((int) signal[k]) + (int) signal[k-1]);
+            if (dd0 < dd1*3) break;
+          }
+          if (k<i+8) continue;
+          dd0 = (int) signal[i+1] - 2*((int) signal[i]) + (int) signal[i-1];
+          j = lrintf((float) dd0 / (float) d);
+          printf("Fixing sticky bit in signal %d, chan %d, t=%d, change %d\n",
+                 out_evts-1, chan, i, j*d/2);
+          signal[i] += j*d/2;
+          // break;
+        }
+      }
     }   // -------- if (flashcam) {} else {
 
     int e = trap_max(signal, &j, TRAP_RISE, TRAP_FLAT)/TRAP_RISE;
@@ -353,39 +409,16 @@ int main(int argc, char **argv) {
     if (chan > 99 && (e < elo/3.4 || e > ehi/3.2)) continue;
     out_evts++;
 
-    /* sticky-bit fix */
-    int d = 128;  // basically a sensitivity threshold; max change found will be d/2
-    if (chan > 99 && chan < 100+runInfo.nGe) d = 64;
-    for (i=20; i<2000; i++) {
-      // calculate second derivatives
-      int dd0 = abs((int) signal[i+1] - 2*((int) signal[i]) + (int) signal[i-1]);
-      int dd1 = abs((int) signal[i+2] - 2*((int) signal[i+1]) + (int) signal[i]);
-      if (dd0 > d && dd0 > dd1 && dd0 > abs(signal[i+1] - signal[i-1])) {
-        // possible occurrence; make sure it's not just high-frequency noise
-        for (k=i-8; k<i+8; k++) {
-          if (k==i-1 || k==i || k == i+1) continue;
-          dd1 = abs((int) signal[k+1] - 2*((int) signal[k]) + (int) signal[k-1]);
-          if (dd0 < dd1*3) break;
-        }
-        if (k<i+8) continue;
-        dd0 = (int) signal[i+1] - 2*((int) signal[i]) + (int) signal[i-1];
-        j = lrintf((float) dd0 / (float) d);
-        printf("Fixing sticky bit in signal %d, chan %d, t=%d, change %d\n",
-               out_evts-1, chan, i, j*d/2);
-        signal[i] += j*d/2;
-        // break;
-      }
-    }
 
-    if (sig_len > 2500) sig_len = 2500;   // FIXME
+    if (sig_len > 3500) sig_len = 3500;   // FIXME
 
     /* ---------------------- process selected signals ---------------------- */
       
     /* find t100 and t90*/
     t100 = 700;                 // FIXME? arbitrary 700?
-    for (i = t100+1; i < 1500; i++)
+    for (i = t100+1; i < sig_len - 500; i++)
       if (signal[t100] < signal[i]) t100 = i;
-    if (t100 > 1300) continue;  // FIXME ??  - important for cleaning, gets rid of pileup
+    if (t100 > sig_len - 700) continue;  // FIXME ??  - important for cleaning, gets rid of pileup
     /* get mean baseline value */
     int bl = 0;
     for (i=300; i<400; i++) bl += signal[i];
@@ -537,7 +570,6 @@ int main(int argc, char **argv) {
   fclose(f_out);
   printf("\n Wrote %d skimmed events to skim.dat\n\n", nsd);
 
-  fclose(f_in);
   printf("\n All Done.\n\n");
   return 0;
 }
