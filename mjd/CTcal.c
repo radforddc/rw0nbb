@@ -235,7 +235,7 @@ int main(int argc, char **argv) {
         if (i%100 >= runInfo.nGe) continue;
         if (i%100 == 0) printf("\n");
         fwhm = 20;
-        j = 5000;
+        j = 4000;
         if (i > 99) {
           fwhm = 8;
           j = 1700;
@@ -300,7 +300,7 @@ int main(int argc, char **argv) {
         if (chan%100 == 0) printf("\n");
         // first for E_ctc
         fwhm = 5;
-        j = 5000;
+        j = 4000;
         if (chan > 99) {
           fwhm = 3;
           j = 1700;
@@ -322,7 +322,7 @@ int main(int argc, char **argv) {
 
         // now for E_lamda
         fwhm = 5;
-        j = 5000;
+        j = 4000;
         if (chan > 99) {
           fwhm = 3;
           j = 1700;

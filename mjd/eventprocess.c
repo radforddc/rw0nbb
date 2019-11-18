@@ -851,8 +851,9 @@ int eventprocess(MJDetInfo *Dets, MJRunInfo *runInfo, int nChData, BdEvent *ChDa
           his2[99][1400+chan]++;
         }
         if (EVENTLIST && e_ctc > EVENTLIST && e_ctc < EVENTLISTMAX && chan < 100) {
+          float ef = (0 && CTC.best_dt_lamda[chan] ? e_lamda : e_ctc);
           fprintf(f_evl, "%3d %7.1f %15lld %d%d%d.%d%d%d%d.%d%d%d%d",
-                  chan, e_ctc, time, lamda_good, dcr_good, a_e_good,
+                  chan, ef, time, lamda_good, dcr_good, a_e_good,
                   DBIT(7), DBIT(6), DBIT(5), DBIT(4), DBIT(3), DBIT(2), DBIT(1), DBIT(0));
           fprintf(f_evl, " %s %cG Q0  %8.1f %6.1f %6.1f   %d %3d %3d  %8.2f %6.2f %6.2f\n",
                   Dets[chan%100].StrName, (chan > 99 ? 'L' : 'H'),
@@ -954,8 +955,9 @@ int eventprocess(MJDetInfo *Dets, MJRunInfo *runInfo, int nChData, BdEvent *ChDa
         }
 
         if (EVENTLIST && e_ctc > EVENTLIST && e_ctc < EVENTLISTMAX && chan < 100) {
+          float ef = (0 && CTC.best_dt_lamda[chan] ? e_lamda : e_ctc);
           fprintf(f_evl, "%3d %7.1f %15lld %d%d%d.%d%d%d%d.%d%d%d%d",
-                  chan, e_ctc, time, lamda_good, dcr_good, a_e_good,
+                  chan, ef, time, lamda_good, dcr_good, a_e_good,
                   DBIT(7), DBIT(6), DBIT(5), DBIT(4), DBIT(3), DBIT(2), DBIT(1), DBIT(0));
           fprintf(f_evl, " %s %cG Q%d  %8.1f %6.1f %6.1f   %d %3d %3d  %8.2f %6.2f %6.2f\n",
                   Dets[chan%100].StrName, (chan > 99 ? 'L' : 'H'), a_e_good + 2*dcr_good + 4*lamda_good,

@@ -170,7 +170,8 @@ int flush_buffers(MJDetInfo *Dets, MJRunInfo *runInfo, BdEvent *modBuf[NBDS], in
           ChData[i]->evlen = 16 + m/2;
           ChData[i]->evbuf[0] = (ChData[i]->evbuf[0] & 0xfffc0000) + ChData[i]->evlen;
         }
-        fwrite(ChData[i]->evbuf, sizeof(int), ChData[i]->evlen, ps_f_out);
+        if (ChData[i]->chan % 100 < runInfo->nGe)
+          fwrite(ChData[i]->evbuf, sizeof(int), ChData[i]->evlen, ps_f_out);
       }
     }
 #endif
@@ -1197,7 +1198,8 @@ int eventbuild(FILE *f_in, MJDetInfo *Dets, MJRunInfo *runInfo) {
             ChData[i]->evlen = 16 + m/2;
             ChData[i]->evbuf[0] = (ChData[i]->evbuf[0] & 0xfffc0000) + ChData[i]->evlen;
           }
-          fwrite(ChData[i]->evbuf, sizeof(int), ChData[i]->evlen, ps_f_out);
+          if (ChData[i]->chan % 100 < runInfo->nGe)
+            fwrite(ChData[i]->evbuf, sizeof(int), ChData[i]->evlen, ps_f_out);
         }
       }
 #else
