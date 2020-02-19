@@ -61,7 +61,7 @@ int eventprocess(MJDetInfo *Dets, MJRunInfo *runInfo, int nChData, BdEvent *ChDa
   double e_ctc, e_adc, e_raw;
   float  emax, drift;
   float  fsignal[8192], aovere, dcr, lamda;
-  int    t0, t90, a_e_good, dcr_good, lamda_good;
+  int    t0, t95, a_e_good, dcr_good, lamda_good;
 
   /*
     detector channels:
@@ -114,7 +114,7 @@ int eventprocess(MJDetInfo *Dets, MJRunInfo *runInfo, int nChData, BdEvent *ChDa
     if (EVENTLIST) {
       f_evl = fopen("coinc_evl.txt", "w");
       fprintf(f_evl, "#chan e_ctc    timestamp    LDA.bits.bits  detector"
-                     " Qx      A/E     DCR  lamda    Run  t90-t0\n");
+                     " Qx      A/E     DCR  lamda    Run  t95-t0\n");
     }
 
     /* open ouput file for signals */
@@ -271,7 +271,7 @@ int eventprocess(MJDetInfo *Dets, MJRunInfo *runInfo, int nChData, BdEvent *ChDa
       }
 
       // ----------------------------------------------------------------
-      /* find t100 and t90*/
+      /* find t100 and t95*/
       int t100 = 700;                 // FIXME? arbitrary 700?
       for (i = t100+1; i < 1500; i++)
         if (signal[t100] < signal[i]) t100 = i;
@@ -279,11 +279,11 @@ int eventprocess(MJDetInfo *Dets, MJRunInfo *runInfo, int nChData, BdEvent *ChDa
       int bl = 0;
       for (i=300; i<400; i++) bl += signal[i];
       bl /= 100;
-      for (t90 = t100-1; t90 > 500; t90--)
-        if ((signal[t90] - bl) <= (signal[t100] - bl)*19/20) break;
+      for (t95 = t100-1; t95 > 500; t95--)
+        if ((signal[t95] - bl) <= (signal[t100] - bl)*19/20) break;
 
       if (t100   > 1300 ||   // important for cleaning, gets rid of pileup
-          t90+50 > 1300) {   // dcr trap extends past end of signal
+          t95+50 > 1300) {   // dcr trap extends past end of signal
         if (VERBOSE || DEBUG)
           printf(">>> Error: chan %d signal at timestamp %lld is too late!\n", chan, time);
         dirty_sig += 64;
@@ -355,7 +355,7 @@ int eventprocess(MJDetInfo *Dets, MJRunInfo *runInfo, int nChData, BdEvent *ChDa
         }
 
         /* get DCR from slope of PZ-corrected signal tail */
-        dcr = float_trap_fixed(fsignal, t90+50, 100, 500) / 25.0;
+        dcr = float_trap_fixed(fsignal, t95+50, 100, 500) / 25.0;
 
         /* do drift-time and energy corrections to A/E, DCR, lamda */
         float dtc = drift*3.0*2614.0/e_adc;   // in (x)us, for DT- correction to A/E
@@ -393,11 +393,11 @@ int eventprocess(MJDetInfo *Dets, MJRunInfo *runInfo, int nChData, BdEvent *ChDa
           if (chan > 99)
             fprintf(f_evl, " %s LG Q%d  %8.1f %6.1f %6.1f   %d %d\n",
                     Dets[chan-100].StrName, a_e_good + 2*dcr_good + 4*lamda_good,
-                    aovere, dcr, lamda, runInfo->runNumber, t90-t0);
+                    aovere, dcr, lamda, runInfo->runNumber, t95-t0);
           else
             fprintf(f_evl, " %s HG Q%d  %8.1f %6.1f %6.1f   %d %d\n",
                     Dets[chan].StrName, a_e_good + 2*dcr_good + 4*lamda_good,
-                    aovere, dcr, lamda, runInfo->runNumber, t90-t0);
+                    aovere, dcr, lamda, runInfo->runNumber, t95-t0);
         }
       }
       // ----------------------------------------------------------------

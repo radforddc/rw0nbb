@@ -81,7 +81,7 @@ int ep_finalize(MJDetInfo *Dets, MJRunInfo *runInfo, int **his,
                      and 6000+baseline_trap (E=0, 4-1.5-4) for FWHM, 0.05 ADC units
       2000 - 2199  trap difference (on-board - trapmax) for trapmax > 100
                      in bins of 0.01 (+1000) and 0.2 (+3000) ADC
-                     and (t90 - t0) time difference for different A/E and DCR cuts 
+                     and (t95 - t0) time difference for different A/E and DCR cuts 
    */
 
   printf("Writing his.rms\n"); fflush(stdout);

@@ -218,14 +218,14 @@ int do_diff(char *fn1, char *fn2, int *type1, int *type2, char **argv) {
   if (nDets2 < 1) return -1;
 
   *type1 = *type2 = 0;
-  if      (runInfo1.runType & 0x23001) *type1 = 1;
-  else if (runInfo1.runType & 0x10000) *type1 = 2;
-  else if (runInfo1.runType & 0x0001c) *type1 = 3;
-  else if (runInfo1.runType & 0xc0800) *type1 = -1;
-  if      (runInfo2.runType & 0x23001) *type2 = 1;
-  else if (runInfo2.runType & 0x10000) *type2 = 2;
-  else if (runInfo2.runType & 0x0001c) *type2 = 3;
-  else if (runInfo2.runType & 0xc0800) *type2 = -1;
+  if (runInfo1.runType & 0x23001) *type1 = 1;  // maybe-ok BG
+  if (runInfo1.runType & 0x10000) *type1 = 2;  // transitional
+  if (runInfo1.runType & 0x0001c) *type1 = 3;  // calib source
+  if (runInfo1.runType & 0xc0800) *type1 = -1; // junk
+  if (runInfo2.runType & 0x23001) *type2 = 1;  // maybe-ok BG
+  if (runInfo2.runType & 0x10000) *type2 = 2;  // transitional
+  if (runInfo2.runType & 0x0001c) *type2 = 3;  // calib source
+  if (runInfo2.runType & 0xc0800) *type2 = -1; // junk
 
   printf("< file 1 from %s : %s, type %d\n"
          "> file 2 from %s : %s, type %d\n",

@@ -84,7 +84,7 @@ void signalselect(FILE *f_in, MJDetInfo *Dets, MJRunInfo *runInfo, int step) {
   int    i, j, k, chan, sig_len;
   FILE   *f_out;
   //FILE   *f_mat;
-  int    t90, t100, bl;
+  int    t95, t100, bl;
   float  pos, area, fwhm;
 
   static int    *his[HIS_COUNT];
@@ -400,7 +400,7 @@ void signalselect(FILE *f_in, MJDetInfo *Dets, MJRunInfo *runInfo, int step) {
     }
 
     // now do step 2 stuff
-    /* find and histogram t100 and t90 */
+    /* find and histogram t100 and t95 */
     t100 = 700;                 // FIXME? arbitrary 700?
     for (i = t100+1; i < sig_len - 500; i++)
       if (signal[t100] < signal[i]) t100 = i;
@@ -410,10 +410,10 @@ void signalselect(FILE *f_in, MJDetInfo *Dets, MJRunInfo *runInfo, int step) {
     for (i=300; i<400; i++) bl += signal[i];
     bl /= 100;
     if ((bl - PZI.baseline[chan]) < -10 || (bl - PZI.baseline[chan]) > 50) continue;   // a little data cleaning
-    for (t90 = t100-1; t90 > 500; t90--)
-      if ((signal[t90]-bl) <= (signal[t100] - bl)*19/20) break;
-    his[200+chan][2000 + t90]++;
-    his[200+chan][4000 + t100-t90]++;
+    for (t95 = t100-1; t95 > 500; t95--)
+      if ((signal[t95]-bl) <= (signal[t100] - bl)*19/20) break;
+    his[200+chan][2000 + t95]++;
+    his[200+chan][4000 + t100-t95]++;
 
     /* do (optional) INL  correction */
     if (DO_INL) {
@@ -492,7 +492,7 @@ void signalselect(FILE *f_in, MJDetInfo *Dets, MJRunInfo *runInfo, int step) {
     if (i < 200) {
       sprintf(spname, "%d; PZ correction info: BL, 1/tau, frac2, lamda, chisq; run %d", i, runInfo->runNumber);
     } else {
-      sprintf(spname, "%d; ch %d baseline RMS; t90; t100-t90", i, i%200);
+      sprintf(spname, "%d; ch %d baseline RMS; t95; t100-t95", i, i%200);
     }
     write_his(his[i], 8192, i, spname, f_out);
   }

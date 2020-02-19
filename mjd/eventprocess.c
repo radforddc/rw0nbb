@@ -129,7 +129,7 @@ int eventprocess(MJDetInfo *Dets, MJRunInfo *runInfo, int nChData, BdEvent *ChDa
                      and 6000+baseline_trap (E=0, 4-1.5-4) for FWHM, 0.05 ADC units
       2000 - 2199  trap difference (on-board - trapmax) for trapmax > 100
                      in bins of 0.01 (+1000) and 0.2 (+3000) ADC
-                     and (t90 - t0) time difference for different A/E and DCR cuts 
+                     and (t95 - t0) time difference for different A/E and DCR cuts 
    */
 
 
@@ -192,7 +192,7 @@ int eventprocess(MJDetInfo *Dets, MJRunInfo *runInfo, int nChData, BdEvent *ChDa
     if (EVENTLIST) {
       f_evl = fopen("evl.txt", "w");
       fprintf(f_evl, "#chan e_ctc    timestamp    LDA.bits.bits  detector"
-                     " Qx      A/E     DCR  lamda    Run  t90-t0 t100-t90  A/E,DCR,lamda - limit\n");
+                     " Qx      A/E     DCR  lamda    Run  t95-t0 t100-t95  A/E,DCR,lamda - limit\n");
     }
 #endif
 
@@ -497,22 +497,22 @@ int eventprocess(MJDetInfo *Dets, MJRunInfo *runInfo, int nChData, BdEvent *ChDa
         if (pulser) {
           /*
           // histogram an approximation to the pulser DCR value
-          int t90, t100, bl;
+          int t95, t100, bl;
           float dcr;
-          // find pulser t90
+          // find pulser t95
           bl = 0;
           for (i=300; i<400; i++) bl += signal[i];
           bl /= 100;
           t100 = 900;
           for (i=901; i<1400; i++)
             if (signal[t100] < signal[i]) t100 = i;
-          for (t90 = t100-1; t90 > 500; t90--)
-            if ((signal[t90]-bl) <= (signal[t100] - bl)*19/20) break;
-          if (t90+50 <= 1300) {
-            dcr = 6000.0 + trap_fixed(signal, t90+250, 100, 300) / 20.0;  // FIXME; see below
+          for (t95 = t100-1; t95 > 500; t95--)
+            if ((signal[t95]-bl) <= (signal[t100] - bl)*19/20) break;
+          if (t95+50 <= 1300) {
+            dcr = 6000.0 + trap_fixed(signal, t95+250, 100, 300) / 20.0;  // FIXME; see below
             dcr += e_trapmax * 5.0 * 4.0/72.0;  // FIXME; delete?
             // physics signals use:
-            // dcr = float_trap_fixed(fsignal, t90+50, 100, 500) / 25.0;
+            // dcr = float_trap_fixed(fsignal, t95+50, 100, 500) / 25.0;
             if (chan > 99) dcr = 3.0*dcr - 12000.0;
             his[200+chan][(int) dcr]++;
           }
@@ -670,14 +670,14 @@ int eventprocess(MJDetInfo *Dets, MJRunInfo *runInfo, int nChData, BdEvent *ChDa
 
       double e_raw, e_adc, e_ctc, e_lamda, gain;
       float  fsignal[8192], drift, aovere, dcr, lamda;
-      int    t0, t90, t100, ebin, a_e_good = 0, a_e_high = 0, dcr_good = 0, lamda_good = 0;
+      int    t0, t95, t100, ebin, a_e_good = 0, a_e_high = 0, dcr_good = 0, lamda_good = 0;
       if (chan < 100) {
         gain = Dets[chan].HGcalib[0];
       } else {
         gain = Dets[chan-100].LGcalib[0];
       }
 
-      /* find t100 and t90*/
+      /* find t100 and t95*/
       t100 = 700;                 // FIXME? arbitrary 700?
       for (i = t100+1; i < 1500; i++)
         if (signal[t100] < signal[i]) t100 = i;
@@ -685,11 +685,11 @@ int eventprocess(MJDetInfo *Dets, MJRunInfo *runInfo, int nChData, BdEvent *ChDa
       int bl = 0;
       for (i=300; i<400; i++) bl += signal[i];
       bl /= 100;
-      for (t90 = t100-1; t90 > 500; t90--)
-        if ((signal[t90] - bl) <= (signal[t100] - bl)*19/20) break;
+      for (t95 = t100-1; t95 > 500; t95--)
+        if ((signal[t95] - bl) <= (signal[t100] - bl)*19/20) break;
 
       if (t100   > 1300 ||      // important for cleaning, gets rid of pileup
-          t90+760 > siglen) {   // dcr trap extends past end of signal
+          t95+760 > siglen) {   // dcr trap extends past end of signal
         if (VERBOSE || DEBUG)
           printf(">>> Error: chan %d signal at timestamp %lld is too late!\n", chan, time);
         dirty_sig += 64;  // FIXME; this is too late to be processed
@@ -776,9 +776,9 @@ int eventprocess(MJDetInfo *Dets, MJRunInfo *runInfo, int nChData, BdEvent *ChDa
           
       /* get DCR from slope of PZ-corrected signal tail */
       if (siglen < 2450) {
-        dcr = float_trap_fixed(fsignal, t90+50, 100, 500) / 25.0;
+        dcr = float_trap_fixed(fsignal, t95+50, 100, 500) / 25.0;
       } else {
-        dcr = float_trap_fixed(fsignal, t90+50, 160, 800) / 40.0;
+        dcr = float_trap_fixed(fsignal, t95+50, 160, 800) / 40.0;
       }
 
       /* do drift-time and energy corrections to A/E, DCR, lamda */
@@ -857,7 +857,7 @@ int eventprocess(MJDetInfo *Dets, MJRunInfo *runInfo, int nChData, BdEvent *ChDa
                   DBIT(7), DBIT(6), DBIT(5), DBIT(4), DBIT(3), DBIT(2), DBIT(1), DBIT(0));
           fprintf(f_evl, " %s %cG Q0  %8.1f %6.1f %6.1f   %d %3d %3d  %8.2f %6.2f %6.2f\n",
                   Dets[chan%100].StrName, (chan > 99 ? 'L' : 'H'),
-                  aovere, dcr, lamda, runInfo->runNumber, t90-t0, t100-t90,
+                  aovere, dcr, lamda, runInfo->runNumber, t95-t0, t100-t95,
                   aovere - PSA.ae_cut[chan], dcr - PSA.dcr_lim[chan], lamda - PSA.lamda_lim[chan]);
         }
 
@@ -867,14 +867,14 @@ int eventprocess(MJDetInfo *Dets, MJRunInfo *runInfo, int nChData, BdEvent *ChDa
         his[1000+chan][ebin]++;
 
         // ----------------------------------------------------------------
-        // histogram drift time (t90 - t0)
-        if (t90 >= t0 && t90 < t0+450 && e_ctc > 1000 && e_ctc < 3000) {
-          his[2000+chan][5000+t90-t0]++;
-          if (a_e_good) his[2000+chan][5500+t90-t0]++;
-          if (dcr_good) his[2000+chan][6000+t90-t0]++;
-          if (!dcr_good) his[2000+chan][6500+t90-t0]++;
-          if (a_e_good && !dcr_good) his[2000+chan][7000+t90-t0]++;
-          if (a_e_good && dcr_good) his[2000+chan][7500+t90-t0]++;
+        // histogram drift time (t95 - t0)
+        if (t95 >= t0 && t95 < t0+450 && e_ctc > 1000 && e_ctc < 3000) {
+          his[2000+chan][5000+t95-t0]++;
+          if (a_e_good) his[2000+chan][5500+t95-t0]++;
+          if (dcr_good) his[2000+chan][6000+t95-t0]++;
+          if (!dcr_good) his[2000+chan][6500+t95-t0]++;
+          if (a_e_good && !dcr_good) his[2000+chan][7000+t95-t0]++;
+          if (a_e_good && dcr_good) his[2000+chan][7500+t95-t0]++;
         }
         // ----------------------------------------------------------------
         /* histogram final results for clean signals */
@@ -961,7 +961,7 @@ int eventprocess(MJDetInfo *Dets, MJRunInfo *runInfo, int nChData, BdEvent *ChDa
                   DBIT(7), DBIT(6), DBIT(5), DBIT(4), DBIT(3), DBIT(2), DBIT(1), DBIT(0));
           fprintf(f_evl, " %s %cG Q%d  %8.1f %6.1f %6.1f   %d %3d %3d  %8.2f %6.2f %6.2f\n",
                   Dets[chan%100].StrName, (chan > 99 ? 'L' : 'H'), a_e_good + 2*dcr_good + 4*lamda_good,
-                  aovere, dcr, lamda, runInfo->runNumber, t90-t0, t100-t90,
+                  aovere, dcr, lamda, runInfo->runNumber, t95-t0, t100-t95,
                   aovere - PSA.ae_cut[chan], dcr - PSA.dcr_lim[chan], lamda - PSA.lamda_lim[chan]);
         }
       }

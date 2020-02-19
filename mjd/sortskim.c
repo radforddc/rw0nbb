@@ -8,7 +8,7 @@
 #define VERBOSE 0
 #define MAKE_2D 1        // make a file with A/E, drift, and energy data for channel CHAN_2D, for 2d plots
 #define CHAN_2D 0        // channel of interest for 2d plotting
-#define HIS_COUNT 2000   // number of spectra in his[][] array
+#define HIS_COUNT 2600   // number of spectra in his[][] array
 
 #define SUBTR_DCR_MEAN (e_adc < 8000 && \
                         ((chan < 100 && SUBTRACT_MEAN_DCR_HG) || \
@@ -46,14 +46,16 @@ int main(int argc, char **argv) {
   PZinfo  PZI;
 
   // data used, stored, and reused in the different steps
-  SavedData **sd;
+  SavedData  **sd1;
+  SavedData2 **sd2;
+  int      sd_version = 1;
   int      chan;
-  float    aovere, aovere_norm, drift, dcr, lamda, s1, s2, s3;
+  float    aovere, aovere_norm, drift, dcr, lamda, lq, s1, s2, s3;
   double   e_raw;
   int      nsd = 0, isd = 0;  // number of saved data, and pointer to saved data id
 
   double e_adc, e_ctc, e_lamda, e_fin, gain;
-  int    i, j, ie;
+  int    i, j, ie, t80, t95, t100;
   int    *his[HIS_COUNT];
   int    *dcr_mean[200], mean_dcr_ready = 0;
   FILE   *f_out, *f_out_2d = 0, *fp;
@@ -76,6 +78,10 @@ int main(int argc, char **argv) {
 
   // read saved skim data from f_in
   fread(&nsd, sizeof(int), 1, f_in);
+  if (nsd == -2) {
+    sd_version = 2;
+    fread(&nsd, sizeof(int), 1, f_in);
+  }
   fread(&Dets[0], sizeof(Dets[0]), NMJDETS, f_in);
   fread(&runInfo, sizeof(runInfo) - 8*sizeof(int), 1, f_in);
   if (runInfo.idNum == 0) {
@@ -83,13 +89,24 @@ int main(int argc, char **argv) {
     fread(&(runInfo.flashcam), 8*sizeof(int), 1, f_in);
   }
   /* malloc space for SavedData */
-  if ((sd = malloc(nsd*sizeof(*sd))) == NULL ||
-      (sd[0] = malloc(nsd*sizeof(SavedData))) == NULL) {
+  if ((sd_version == 1 &&
+       ((sd1 = malloc(nsd*sizeof(*sd1))) == NULL ||
+        (sd1[0] = malloc(nsd*sizeof(*sd1[0]))) == NULL)) ||
+      (sd_version == 2 &&
+       ((sd2 = malloc(nsd*sizeof(*sd2))) == NULL ||
+        (sd2[0] = malloc(nsd*sizeof(*sd2[0]))) == NULL))) {
     printf("ERROR in sortskim.c; cannot malloc SavedData!\n");
     exit(-1);
   }
-  for (i=1; i<nsd; i++) sd[i] = sd[i-1] + 1;
-  fread(*sd, sizeof(SavedData), nsd, f_in);
+  printf("Skim data mode = %d\n", sd_version);
+  if (sd_version == 1) {
+    for (i=1; i<nsd; i++) sd1[i] = sd1[i-1] + 1;
+    fread(*sd1, sizeof(**sd1), nsd, f_in);
+  } else {   // sd_version == 2
+    for (i=1; i<nsd; i++) sd2[i] = sd2[i-1] + 1;
+    fread(*sd2, sizeof(**sd2), nsd, f_in);
+  }
+
   printf(" Skim is data from runs starting at number %d from file %s\n",
          runInfo.runNumber, runInfo.filename);
 
@@ -152,7 +169,7 @@ int main(int argc, char **argv) {
     char fname[64];
     sprintf(fname, "PSA_ch%3.3d_2d.dat", CHAN_2D);
     f_out_2d = fopen(fname, "w");
-    fprintf(f_out_2d, "#chan    E_ctc     A/E    A/E_raw    DT   DT_corr  DCR   lamda  t90-100\n");
+    fprintf(f_out_2d, "#chan    E_ctc     A/E    A/E_raw    DT   DT_corr  DCR   lamda  t95-100\n");
   }
 
   // end of initialization
@@ -160,14 +177,28 @@ int main(int argc, char **argv) {
 
   for (isd = 0; isd < nsd; isd++) {
     // if (isd%(nsd/10) == 0) printf(">>  event %7d (%d/10\n", isd, isd*10/nsd);
-    chan   = sd[isd]->chan;
-    e_raw  = sd[isd]->e;
-    drift  = sd[isd]->drift;
-    aovere = sd[isd]->a_over_e;
-    dcr    = sd[isd]->dcr;
-    lamda  = sd[isd]->lamda;
-    // if (sd[isd]->t100 - sd[isd]->t90 > 15) continue;
- 
+    if (sd_version == 1) {
+      chan   = sd1[isd]->chan;
+      e_raw  = sd1[isd]->e;
+      drift  = sd1[isd]->drift;
+      aovere = sd1[isd]->a_over_e;
+      dcr    = sd1[isd]->dcr;
+      lamda  = sd1[isd]->lamda;
+      t95    = sd1[isd]->t95;
+      t100   = sd1[isd]->t100;
+    } else {                       // sd_version == 2
+      chan   = sd2[isd]->chan;
+      e_raw  = sd2[isd]->e;
+      drift  = sd2[isd]->drift;
+      aovere = sd2[isd]->a_over_e;
+      dcr    = sd2[isd]->dcr;
+      lamda  = sd2[isd]->lamda;
+      lq     = sd2[isd]->lq;
+      t80    = sd2[isd]->t80;
+      t95    = sd2[isd]->t95;
+      t100   = sd2[isd]->t100;
+    }
+    // if (t100 - t95 > 15) continue;
     if (chan < 100) {
       gain = Dets[chan].HGcalib[0];
     } else {
@@ -232,21 +263,26 @@ int main(int argc, char **argv) {
     if ((j = lrintf(s2)) > -500 && j < 500) his[1800+chan][3000+j]++;
     if ((j = lrintf(s1)) > -500 && j < 500) his[1800+chan][5000+j]++;
     if ((j = lrintf(s3)) > -500 && j < 500) his[1800+chan][6000+j]++;
+    if (s2 >= 0 && s1 <= 0 && (j = lrintf(lq)) > -100 && j < 900) his[1800+chan][7000+j]++;
 
     /* do A/E and DCR cuts on energy */
+    float cut = PSA.lq_lim[chan];
     if (ie < 8192 && ie > 0) {
       if (s2 >= 0)            his[400+chan][ie]++;  // A/E
       if (s1 <= 0)            his[600+chan][ie]++;  // DCR
       if (s2 >= 0 && s1 <= 0) his[800+chan][ie]++;  // A/E + DCR
       if (s3 <=0)             his[1000+chan][ie]++; // lamda
       if (s2 >= 0 && s3 <= 0) his[1200+chan][ie]++; // A/E + lamda
+      if (lq < cut)           his[2000+chan][ie]++; // lq
+      if (s2 >= 0 && lq < cut)            his[2200+chan][ie]++; // A/E + lq
+      if (s2 >= 0 && s1 <= 0 && lq < cut) his[2400+chan][ie]++; // A/E + DCR + lq
     }
 
     // make file for 2D plots  of A/E|E|CTC
     if (f_out_2d && chan == CHAN_2D && e_ctc >= elo_2d && e_ctc <= ehi_2d)
       fprintf(f_out_2d, "%4d %9.3f %8.2f %8.2f %7.2f %7.2f %7.2f %7.2f %6d\n",
               chan, e_ctc, aovere_norm, s2, drift, dtc,
-              s1, s3, sd[isd]->t100 - sd[isd]->t90);
+              s1, s3, t100 - t95);
 
   }
 
@@ -276,7 +312,13 @@ int main(int argc, char **argv) {
     } else if (i < 1800) {
       sprintf(spname, "%d; ch %d Energy, lamda-corrected [0.5 keV]", i, i%200);
     } else if (i < 2000) {
-      sprintf(spname, "%d; ch %d A/E raw, moved to cut; DCR, lamda moved to cut", i, i%200);
+      sprintf(spname, "%d; ch %d A/E raw, moved to cut; DCR, lamda, lq moved to cut", i, i%200);
+    } else if (i < 2200) {
+      sprintf(spname, "%d; ch %d CT-corrected energy, lq cut [0.5 keV]", i, i%200);
+    } else if (i < 2400) {
+      sprintf(spname, "%d; ch %d CT-corrected energy, A/E + lq cuts [0.5 keV]", i, i%200);
+    } else if (i < 2600) {
+      sprintf(spname, "%d; ch %d CT-corrected energy, A/E + DCR + lq cuts [0.5 keV]", i, i%200);
     } else {
       sprintf(spname, "%d;", i);
     }

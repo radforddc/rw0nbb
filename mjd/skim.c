@@ -91,23 +91,26 @@ int main(int argc, char **argv) {
   float  fsignal[8192] = {0};
 
   // data used, stored, and reused in the different steps
-  SavedData **sd;
+  SavedData2 **sd;
   int    chan;
   double e_raw;
-  float  drift, aovere, dcr, lamda;
+  float  drift, aovere, dcr, lamda, lq;
   int    nsd = 0, isd = 0;  // number of saved data, and pointer to saved data id
   int    sdchunk = 1000000; // number of SavedData events to malloc at one time
 
   double e_ctc, e_adc;
-  int    i, j, k, t90, t100, sig_len, his[8192] = {0};
+  int    i, j, k, t80, t95, t100, sig_len, his[8][8192] = {{0}};
   FILE   *f_out;
 
 
   /* initialize */
 
+  f_out = fopen("2d.dat", "w");
+  fprintf(f_out, "# e_raw  drift  aovere  dcr   lq\n");
+
   /* malloc initial space for SavedData */
   if ((sd = malloc(sdchunk*sizeof(*sd))) == NULL ||
-      (sd[0] = malloc(sdchunk*sizeof(SavedData))) == NULL) {
+      (sd[0] = malloc(sdchunk*sizeof(*sd[0]))) == NULL) {
     printf("ERROR in skim.c; cannot malloc SavedData!\n");
     exit(-1);
   }
@@ -414,7 +417,7 @@ int main(int argc, char **argv) {
 
     /* ---------------------- process selected signals ---------------------- */
       
-    /* find t100 and t90*/
+    /* find t100, t80, and t95*/
     t100 = 700;                 // FIXME? arbitrary 700?
     for (i = t100+1; i < sig_len - 500; i++)
       if (signal[t100] < signal[i]) t100 = i;
@@ -424,8 +427,15 @@ int main(int argc, char **argv) {
     for (i=300; i<400; i++) bl += signal[i];
     bl /= 100;
     if ((bl - PZI.baseline[chan]) < -10 || (bl - PZI.baseline[chan]) > 50) continue;   // a little data cleaning
-    for (t90 = t100-1; t90 > 500; t90--)
-      if ((signal[t90] - bl) <= (signal[t100] - bl)*19/20) break;
+    i = bl + (signal[t100] - bl)*19/20;
+    for (t95 = t100-1; t95 > 500; t95--)
+      if (signal[t95] <= i) break;
+
+    i = bl + (signal[t100] - bl)*4/5;
+    for (t80 = t95; t80 > 500; t80--)
+      if (signal[t80] <= i) break;
+    lq = (float) (signal[t80+1] - i) / (float) (signal[t80+1] - signal[t80]); // floating remainder for t80
+    lq *= (signal[t100] - (signal[t80+1] + i)/2);  // charge (not yet) arriving during that remainder
 
     /* do (optional) INL  correction */
     if (DO_INL) {
@@ -504,23 +514,45 @@ int main(int argc, char **argv) {
 
     /* get DCR from slope of PZ-corrected signal tail */
     if (sig_len < 2450) {
-      if (t90 + 760 > sig_len) {
+      if (t95 + 760 > sig_len) {
         if (VERBOSE)
-          printf("Error getting DCR in skim.c: t90 = %d, sig_len = %d\n", t90, sig_len);
+          printf("Error getting DCR in skim.c: t95 = %d, sig_len = %d\n", t95, sig_len);
         continue;
       }
-      dcr = float_trap_fixed(fsignal, t90+50, 100, 500) / 25.0;
+      dcr = float_trap_fixed(fsignal, t95+50, 100, 500) / 25.0;
     } else {
-      if (t90 + 1180 > sig_len) {
+      if (t95 + 1180 > sig_len) {
         if (VERBOSE)
-          printf("Error getting DCR in skim.c: t90 = %d, sig_len = %d\n", t90, sig_len);
+          printf("Error getting DCR in skim.c: t95 = %d, sig_len = %d\n", t95, sig_len);
         continue;
       }
-      dcr = float_trap_fixed(fsignal, t90+50, 160, 800) / 40.0;
+      dcr = float_trap_fixed(fsignal, t95+50, 160, 800) / 40.0;
     }
-    if (runInfo.flashcam) dcr /= 2.0;
+    if (runInfo.flashcam) dcr /= 2.0;  // adjust for different flashcam scaling relative to GRETINA card
+    /* get late charge (lq) = delay in charge arriving after t80 */
+    lq += float_trap_fixed(fsignal, t80+1, 100, 100);
+    lq /= e_raw/100.0;
 
-    if (e_raw > 0 && e_raw < 8000) his[(int) e_raw]++;
+    if (e_raw > 10 && e_raw < 8000) {
+      if (lq < 300)  his[0][1000 + (int) lq]++;
+      his[1][(int) e_raw]++;
+      i = drift * 100.0 * 5000.0/e_raw + 5000;
+      if (i > 4000 && i < 8000)  his[0][i]++;
+      if (lq > 20) his[2][(int) e_raw]++;
+      if (lq > 20 && drift > 0) his[3][(int) e_raw]++;
+      if (lq > 20 && i > 0 && i < 8000) his[4][i]++;
+      if (aovere > 1390) {    // ~ single site 
+        his[6][(int) e_raw]++;
+        if (lq < 3000)  his[5][1000 + (int) lq]++;
+        if (i > 4000 && i < 8000) his[5][i]++;
+        if (lq > 30) {
+          his[7][(int) e_raw]++;
+          // printf("@timestamp %lld\n", time);
+        }
+        fprintf(f_out, "%7.1f %6.2f %7.2f %6.2f %6.1f\n", e_raw, drift, aovere, dcr, lq);
+      }
+    }
+
     // save data for skim file
     sd[isd]->chan     = chan;
     sd[isd]->e        = e_raw;
@@ -528,12 +560,14 @@ int main(int argc, char **argv) {
     sd[isd]->a_over_e = aovere;
     sd[isd]->dcr      = dcr;
     sd[isd]->lamda    = lamda;
+    sd[isd]->lq       = lq;
     sd[isd]->t0       = t0;
-    sd[isd]->t90      = t90;
+    sd[isd]->t80      = t80;
+    sd[isd]->t95      = t95;
     sd[isd]->t100     = t100;
     if (++isd == nsd) { // space allocated for saved data is now full; malloc more
       if ((sd = realloc(sd, (isd + sdchunk)*sizeof(*sd))) == NULL ||
-          (sd[isd] = malloc(sdchunk*sizeof(SavedData))) == NULL) {
+          (sd[isd] = malloc(sdchunk*sizeof(*sd[isd]))) == NULL) {
         printf("ERROR in skim.c; cannot realloc SavedData! nsd = %d\n", nsd);
         exit(-1);
       }
@@ -541,8 +575,10 @@ int main(int argc, char **argv) {
       for (i=isd+1; i<nsd; i++) sd[i] = sd[i-1]+1;
     }
   }
+  fclose(f_out);
+
   f_out = fopen("skim.sec", "w");
-  fwrite(his, sizeof(int), 8192, f_out);
+  fwrite(his[0], sizeof(int), 8*8192, f_out);
   fclose(f_out);
 
   printf(" %8d evts in, %d out, %d saved\n", totevts, out_evts, isd);
@@ -550,6 +586,8 @@ int main(int argc, char **argv) {
 
   // save skim data (SavedData) to disk
   f_out = fopen("skim.dat", "w");
+  i = -2;
+  fwrite(&i, sizeof(int), 1, f_out);    // flag to tell reading programs to use SavedData2 instead of SavedData
   fwrite(&nsd, sizeof(int), 1, f_out);
   fwrite(&Dets[0], sizeof(Dets[0]), NMJDETS, f_out);
   if (runInfo.flashcam) {
@@ -558,17 +596,17 @@ int main(int argc, char **argv) {
   } else {
     fwrite(&runInfo, sizeof(runInfo) - 8*sizeof(int), 1, f_out);
   }
-  // fwrite(*sd, sizeof(SavedData), nsd, f_out);
+  // fwrite(*sd, sizeof(**sd), nsd, f_out);
   // writing large files all in one go doesn't seem to work?
   for (isd = 0; isd < nsd; isd += sdchunk) {
     if (nsd - isd < sdchunk) {
-      fwrite(sd[isd], sizeof(SavedData), nsd - isd, f_out);
+      fwrite(sd[isd], sizeof(**sd), nsd - isd, f_out);
     } else {
-      fwrite(sd[isd], sizeof(SavedData), sdchunk, f_out);
+      fwrite(sd[isd], sizeof(**sd), sdchunk, f_out);
     }
   }
   fclose(f_out);
-  printf("\n Wrote %d skimmed events to skim.dat\n\n", nsd);
+  printf("\n Wrote %d skimmed events of size %lu to skim.dat\n\n", nsd, sizeof(**sd));
 
   printf("\n All Done.\n\n");
   return 0;

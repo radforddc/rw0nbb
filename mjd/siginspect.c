@@ -21,14 +21,16 @@ int main(int argc, char **argv) {
   char       *c, fname[256], line[256];
 
   if (argc < 6) {
-    fprintf(stderr, "\nusage: %s fname_in chnum_lo chnum_hi e_lo e_hi [-nakKdpzt]\n"
+    fprintf(stderr, "\nusage: %s fname_in chnum_lo chnum_hi e_lo e_hi [-nakKdpzilt]\n"
             "     -n: do not subtract initial baseline\n"
             "     -z: subtract final signal, so that shifted value is zero after rise\n"
-            "     -a: align signals to t90 = sample 1100\n"
+            "     -a: align signals to t80 = sample 1100\n"
             "     -k: e_lo, e_hi are in keV rather than ADC\n"
             "     -K: e_lo, e_hi are in keV, calculated using PZ correction\n"
             "     -p: do PZ correction\n"
             "     -d: take derivative of signal\n"
+            "     -i: do not try to correct for INL\n"
+            "     -l: select only events passing A/E and DCR but failing lq cut\n"
             "     -t: read a list of timestamps to get from ts.input\n\n", argv[0]);
     return -1;
   }
@@ -119,19 +121,22 @@ void signalselect(FILE *f_in, MJDetInfo *Dets, MJRunInfo *runInfo) {
   int    board_type, dataIdRun=0;
   unsigned int  head[2], evtdat[20000];
   static int    totevts=0, out_evts=0, clo, chi, elo, ehi;
-  static int    doINL = 1, doPZ = 0, current_runNumber = 0;
+  static int    doINL = 1, doPZ = 0, doLQ = 0, current_runNumber = 0;
   static long long int time, tsget[2000] = {0};
 
   static int module_lu[NCRATES+1][21];  // lookup table to map VME crate&slot into module IDs
   static int det_lu[NBDS][16];          // lookup table to map module&chan into detector IDs
   static int chan_lu[NBDS][16];         // lookup table to map module&chan into parameter IDs
-  static PZinfo PZI;
+  static PZinfo  PZI;
+  static PSAinfo PSA;
 
   static FILE   *f_out=0, *f_ts = 0;
   static int    argn = 1, subbl = 1, kev = 0, align = 0, ts_sel = 0, erro, ntsget = 0, norm = 0, deriv=0;
   short  *signal, ucsig[8192], sigu[2048];  // ucsig = uncompressed signal (presumming corrected)
   float  fsignal[8192] = {0}, fs2[8192] = {0}, e1;
-  int    t90, t100, bl, step, tsmatch = 0;
+  float  drift, aovere, dcr, lq;
+  double e_raw, e_adc, e_ctc;
+  int    t80, t95, t100, bl, step, tsmatch = 0;
   char   line[256];
 
  
@@ -148,6 +153,8 @@ void signalselect(FILE *f_in, MJDetInfo *Dets, MJRunInfo *runInfo) {
         if (strstr(runInfo->argv[argn], "K")) kev   = 2;
         if (strstr(runInfo->argv[argn], "p")) doPZ  = 1;
         if (strstr(runInfo->argv[argn], "d")) deriv = 1;
+        if (strstr(runInfo->argv[argn], "i")) doINL = 0;
+        if (strstr(runInfo->argv[argn], "l")) doLQ  = 1;
         if (strstr(runInfo->argv[argn], "t") &&
             (f_ts = fopen("ts.input", "r"))) ts_sel = 1;
       }
@@ -165,9 +172,22 @@ void signalselect(FILE *f_in, MJDetInfo *Dets, MJRunInfo *runInfo) {
     if (runInfo->argc > argn && strstr(runInfo->argv[argn], "K")) kev   = 2;
     if (runInfo->argc > argn && strstr(runInfo->argv[argn], "p")) doPZ  = 1;
     if (runInfo->argc > argn && strstr(runInfo->argv[argn], "d")) deriv = 1;
+    if (runInfo->argc > argn && strstr(runInfo->argv[argn], "i")) doINL = 0;
+    if (runInfo->argc > argn && strstr(runInfo->argv[argn], "l")) doLQ  = 1;
     if (runInfo->argc > argn && strstr(runInfo->argv[argn], "t") &&
         (f_ts = fopen("ts.input", "r"))) ts_sel = 1;
 
+    if (doLQ) doPZ = 1;
+
+    /* read A/E, DCR, and lamda values from psa.input */
+    /* also read individual trapezoid values from filters.input (if it exists) */
+    if (!PSA_info_read(runInfo, &PSA)) {
+      printf("\n ERROR: No initial PSA data read. Does psa.input exist?\n");
+      if (doLQ) {
+        printf("   LQ cut requires psa.input; aborting.\n");
+        exit(-1);
+      }
+    }
 
     f_out = fopen("s.rms", "w");
     if (kev==2 || doPZ) doPZ = PZ_info_read(runInfo, &PZI);
@@ -339,7 +359,6 @@ void signalselect(FILE *f_in, MJDetInfo *Dets, MJRunInfo *runInfo) {
       if (// !erro &&
           (e1 < elo || e1 > ehi) &&
           !tsmatch) continue;
-      out_evts++;
 
       /* sticky-bit fix */
       d = 128;  // basically a sensitivity threshold; max change found will be d/2
@@ -365,18 +384,31 @@ void signalselect(FILE *f_in, MJDetInfo *Dets, MJRunInfo *runInfo) {
         }
       }
 
-      /* write out selected signals */
       /* find mean baseline value */
       bl = 0;
       for (i=300; i<400; i++) bl += signal[i];
       bl /= 100;
 
-      /* find t90 */
-      t100 = 900;
-      for (i=901; i<1400; i++)
+      // lost events for doLQ=0 between here
+      //out_evts++;
+      /* find t100, t80, and t95*/
+      t100 = 700;                 // FIXME? arbitrary 700?
+      for (i = t100+1; i < sig_len - 500; i++)
         if (signal[t100] < signal[i]) t100 = i;
-      for (t90 = t100-1; t90 > 500; t90--)
-        if ((signal[t90]-bl) <= (signal[t100] - bl)*19/20) break;
+      if (t100 > sig_len - 700) continue;  // FIXME ??  - important for cleaning, gets rid of pileup
+      /* get mean baseline value */
+      if (doPZ &&
+          ((bl - PZI.baseline[chan]) < -10 || (bl - PZI.baseline[chan]) > 50)) continue;   // a little data cleaning
+      i = bl + (signal[t100] - bl)*19/20;
+      for (t95 = t100-1; t95 > 500; t95--)
+        if (signal[t95] <= i) break;
+      i = bl + (signal[t100] - bl)*4/5;
+      for (t80 = t95; t80 > 500; t80--)
+        if (signal[t80] <= i) break;
+      lq = (float) (signal[t80+1] - i) / (float) (signal[t80+1] - signal[t80]); // floating remainder for t80
+      lq *= (signal[t100] - (signal[t80+1] + i)/2);  // charge (not yet) arriving during that remainder
+      // and here
+      //out_evts++;
 
       /* do (optional) INL and PZ corrections */
       if (doINL) {
@@ -393,6 +425,90 @@ void signalselect(FILE *f_in, MJDetInfo *Dets, MJRunInfo *runInfo) {
         for (i=0; i<sig_len; i++) signal[i] = lrintf(fsignal[i]);
       }
       if (1 && (doINL || doPZ)) bl = PZI.baseline[chan];
+
+      if (doLQ) {
+        /* get raw (e_raw) and drift-time-corrected energy (e_adc and e_ctc)
+           and effective drift time */
+        int tmax, t0;
+        e_ctc = get_CTC_energy(fsignal, sig_len, chan, Dets, &PSA,
+                               &t0, &e_adc, &e_raw, &drift, 0.0);
+        if (e_ctc < 0.001) {
+          printf("E_ctc = %.1f < 1 eV!\n", e_ctc);
+          if (VERBOSE) printf("chan, t0, t100: %d %d %d; e, drift: %.2f %.2f\n",
+                              chan, t0, t100, e_raw, drift);
+          continue;
+        }
+        if (runInfo->flashcam) {
+          e_ctc /= 2.0;
+          e_adc /= 2.0;
+          e_raw /= 2.0;
+          drift /= 2.0;
+        }
+
+        /* find A/E */
+        aovere = float_trap_max_range(fsignal, &tmax, PSA.a_e_rise[chan], 0, t0-20, t0+300);
+        aovere *= PSA.a_e_factor[chan] / e_raw;
+        if (runInfo->flashcam) aovere /= 2.0;
+        /* ---- This next section calculates the GERDA-style A/E ---- */
+        if (PSA.gerda_aoe[chan]) {
+          float  ssig[6][2000];
+          for (k=100; k<2000; k++) ssig[0][k] = fsignal[k] - fsignal[300];
+          for (j=1; j<6; j++) {  // number of cycles
+            for (i=200; i < 1500; i++) {
+              ssig[j][i] = 0.0;
+              for (k=0; k<10; k++) {
+                ssig[j][i] += ssig[j-1][i+k-5];
+              }
+              ssig[j][i] /= 10.0;
+            }
+          }
+          aovere = 0;
+          for (k=250; k<1450; k++) {
+            if (aovere < ssig[5][k] - ssig[5][k-1]) aovere = ssig[5][k] - ssig[5][k-1];
+          }
+          aovere *= 12.71*1593/e_raw;
+        }
+        /* ---- end of GERDA-style A/E ---- */
+        float dtc = drift*3.0*2614.0/e_adc;   // in (x)us, for DT- correction to A/E
+        if (chan%100 == 50) dtc *= 3.0;       // special hack for detector 50; has especially strong variation
+        float ec = e_ctc/1000.0 - 2.0;        // in MeV, for E-correction to A/E
+        float aovere1 = aovere + PSA.ae_dt_slope[chan] * dtc;
+        float aovere2 = aovere1 + PSA.ae_e_slope[chan] * ec;
+        //if (AOE_CORRECT_NOISE)
+        //  aovere2 -= (2.0 * PZI.bl_rms[chan] * sqrt(2.0 * (float) PSA.a_e_rise[chan]) *
+        //         PSA.a_e_factor[chan] * gain/1593.0 * (1.0 - 1593.0/e_ctc));        // 1593 keV = DEP
+        aovere2 -= AOE_CORRECT_EDEP * (PSA.ae_pos[chan] - PSA.ae_cut[chan]) * (1.0 - e_ctc*e_ctc/1593.0/1593.0);
+        if (PSA.ae_pos[chan] > 100 && aovere2 < PSA.ae_cut[chan]) continue; // fails A/E cut and doLQ == 1
+
+        /* get DCR from slope of PZ-corrected signal tail */
+        if (sig_len < 2450) {
+          if (t95 + 760 > sig_len) {
+            if (VERBOSE)
+              printf("Error getting DCR in skim.c: t95 = %d, sig_len = %d\n", t95, sig_len);
+            continue;
+          }
+          dcr = float_trap_fixed(fsignal, t95+50, 100, 500) / 25.0;
+        } else {
+          if (t95 + 1180 > sig_len) {
+            if (VERBOSE)
+              printf("Error getting DCR in skim.c: t95 = %d, sig_len = %d\n", t95, sig_len);
+            continue;
+          }
+          dcr = float_trap_fixed(fsignal, t95+50, 160, 800) / 40.0;
+        }
+        dcr -= PSA.dcr_dt_slope[chan] * drift;
+        if (dcr > PSA.dcr_lim[chan]) continue;         // fails DCR cut and doLQ == 1
+
+        /* get late charge (lq) = delay in charge arriving after t80 */
+        lq += float_trap_fixed(fsignal, t80+1, 100, 100);
+        lq /= e_raw/100.0;
+        if (lq < PSA.lq_lim[chan]) continue; // passes LQ cut and doLQ == 1 selects only LQ-failing events
+        if (0)
+          printf("chan %3d | A/E, cut: %6.1f %6.1f | DCR, cut: %5.1f %5.1f | lq, cut: %5.1f %5.1f\n",
+                 chan, aovere2, PSA.ae_cut[chan], dcr, PSA.dcr_lim[chan], lq, PSA.lq_lim[chan]);
+      }  // end   if (doLQ) {
+
+      out_evts++;
 
       // optionally subtract initial baseline
       if (subbl)
@@ -424,14 +540,14 @@ void signalselect(FILE *f_in, MJDetInfo *Dets, MJRunInfo *runInfo) {
           if (signal[i] > d/2) signal[i] -= d;
       }
 
-      // optionally align t90 to t=1100
+      // optionally align t80 to t=1100
       if (align) {
-        if (t90 > 1100) {
-          j = t90 - 1100;
+        if (t80 > 1100) {
+          j = t80 - 1100;
           for (i=1; i+j < sig_len; i++)
             signal[i] = signal[i+j];
-        } else if (t90 < 1100) {
-          j = 1100 - t90;
+        } else if (t80 < 1100) {
+          j = 1100 - t80;
           for (i=sig_len - 1; i-j > 0; i--)
             signal[i] = signal[i-j];
         }

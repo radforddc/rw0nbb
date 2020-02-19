@@ -56,9 +56,11 @@ int main(int argc, char **argv) {
   PZinfo  PZI;
 
   // data used, stored, and reused in the different steps
-  SavedData **sd;
+  SavedData  **sd1;
+  SavedData2 **sd2;
+  int      sd_version = 1;
   int      chan;
-  float    aovere, drift;
+  float    aovere, drift, lq;
   double   e_raw;
   int      nsd = 0, isd = 0;  // number of saved data, and pointer to saved data id
 
@@ -88,6 +90,10 @@ int main(int argc, char **argv) {
 
   // read saved skim data from f_in
   fread(&nsd, sizeof(int), 1, f_in);
+  if (nsd == -2) {
+    sd_version = 2;
+    fread(&nsd, sizeof(int), 1, f_in);
+  }
   fread(&Dets[0], sizeof(Dets[0]), NMJDETS, f_in);
   fread(&runInfo, sizeof(runInfo) - 8*sizeof(int), 1, f_in);
   if (runInfo.idNum == 0) {
@@ -95,13 +101,23 @@ int main(int argc, char **argv) {
     fread(&(runInfo.flashcam), 8*sizeof(int), 1, f_in);
   }
   /* malloc space for SavedData */
-  if ((sd = malloc(nsd*sizeof(*sd))) == NULL ||
-      (sd[0] = malloc(nsd*sizeof(SavedData))) == NULL) {
+  if ((sd_version == 1 &&
+       ((sd1 = malloc(nsd*sizeof(*sd1))) == NULL ||
+        (sd1[0] = malloc(nsd*sizeof(*sd1[0]))) == NULL)) ||
+      (sd_version == 2 &&
+       ((sd2 = malloc(nsd*sizeof(*sd2))) == NULL ||
+        (sd2[0] = malloc(nsd*sizeof(*sd2[0]))) == NULL))) {
     printf("ERROR in PSAcal.c; cannot malloc SavedData!\n");
     exit(-1);
   }
-  for (i=1; i<nsd; i++) sd[i] = sd[i-1] + 1;
-  fread(*sd, sizeof(SavedData), nsd, f_in);
+  printf("Skim data mode = %d\n", sd_version);
+  if (sd_version == 1) {
+    for (i=1; i<nsd; i++) sd1[i] = sd1[i-1] + 1;
+    fread(*sd1, sizeof(**sd1), nsd, f_in);
+  } else {   // sd_version == 2
+    for (i=1; i<nsd; i++) sd2[i] = sd2[i-1] + 1;
+    fread(*sd2, sizeof(**sd2), nsd, f_in);
+  }
   printf(" Skim is data from runs starting at number %d from file %s\n",
          runInfo.runNumber, runInfo.filename);
 
@@ -170,15 +186,16 @@ int main(int argc, char **argv) {
     char fname[64];
     sprintf(fname, "PSA_ch%3.3d_2d.dat", CHAN_2D);
     f_out_2d = fopen(fname, "w");
-    fprintf(f_out_2d, "#chan    E_ctc     A/E    A/E_raw    DT   DT_corr  DCR   lamda  t90-100\n");
+    fprintf(f_out_2d, "#chan    E_ctc     A/E    A/E_raw    DT   DT_corr  DCR   lamda  lq\n");
   }
 
   // end of initialization
   // start loop over events in skim data
 
   // ---------------------- steps 1-5 ----------------------
-  for (int step = 1; step <= 5; step++) {
-    printf(" ******************** Step %d of 5 ********************\n", step);
+  for (int step = 1; step <= 6; step++) {
+    printf(" ******************** Step %d of 6 ********************\n", step);
+    if (step == 6 && sd_version == 1) continue; 
 
     /*
      * Step 1: Histogram: Raw A/E
@@ -193,17 +210,30 @@ int main(int argc, char **argv) {
      * Step 5: Histogram: E_ctc cut by A/E_ctc_e
      *            to get: Final spectra, A/E acceptances
      *         Also make file for 2D plots of A/E|E|CTC if required
+     *            and get lq cut value
+     * Step 6: Histogram: E_ctc cut by A/E_ctc_e and lq
+     *            to get: Final spectra, A/E acceptances
      */
 
     for (isd = 0; isd < nsd; isd++) {
       // if (isd%(nsd/10) == 0) printf(">>  event %7d (%d/10\n", isd, isd*10/nsd);
-      chan   = sd[isd]->chan;
-      e_raw  = sd[isd]->e;
-      drift  = sd[isd]->drift;
-      aovere = sd[isd]->a_over_e;
-      dcr    = sd[isd]->dcr;
-      lamda  = sd[isd]->lamda;
-      // if (sd[isd]->t100 - sd[isd]->t90 > 15) continue;
+      if (sd_version == 1) {
+        chan   = sd1[isd]->chan;
+        e_raw  = sd1[isd]->e;
+        drift  = sd1[isd]->drift;
+        aovere = sd1[isd]->a_over_e;
+        dcr    = sd1[isd]->dcr;
+        lamda  = sd1[isd]->lamda;
+        lq     = 1;
+      } else {                       // sd_version == 2
+        chan   = sd2[isd]->chan;
+        e_raw  = sd2[isd]->e;
+        drift  = sd2[isd]->drift;
+        aovere = sd2[isd]->a_over_e;
+        dcr    = sd2[isd]->dcr;
+        lamda  = sd2[isd]->lamda;
+        lq     = sd2[isd]->lq;
+      }
 
       e_adc = e_raw + drift*CTC.e_dt_slope[chan];
       lamda *= 8.0;                              // scaled to roughly match DCR at 2 MeV
@@ -278,9 +308,9 @@ int main(int argc, char **argv) {
 
         // make file for 2D plots  of A/E|E|CTC
         if (f_out_2d && chan == CHAN_2D && e_ctc >= roi_elo)// && e_ctc <= roi_elo+700)
-          fprintf(f_out_2d, "%4d %9.3f %8.2f %8.2f %7.2f %7.2f %7.2f %7.2f %6d\n",
+          fprintf(f_out_2d, "%4d %9.3f %8.2f %8.2f %7.2f %7.2f %7.2f %7.2fn",
                   chan, e_ctc, aovere_norm, aovere * 800.0/a_e_pos[chan], drift, dtc,
-                  sd[isd]->dcr, sd[isd]->lamda/1.3, sd[isd]->t100 - sd[isd]->t90);
+                  dcr, lamda/1.3);
       }
 
       /* find and test A/E cut */
@@ -339,6 +369,21 @@ int main(int argc, char **argv) {
           if (s2 >= PSA.ae_cut[chan])   his[600+chan][1000 + e2]++;
           if (s2 >= PSA.ae_cut[chan]-1) his[600+chan][2000 + e2]++;
           if (s2 >= PSA.ae_cut[chan]+1) his[600+chan][3000 + e2]++;
+        }
+        if (sd_version > 1 && e_ctc >= 1400 &&
+            a_e_pos[chan] > 100 && s2 >= PSA.ae_cut[chan] &&
+            (j = lrintf(lq)) > 5 && j < 1000) his[600+chan][6000 + j]++;  // histogram A/E-gated lq distribution
+      } else if (step == 6) {
+        s2 = aovere2;
+        if (AOE_CORRECT_NOISE)
+          s2 -= (2.0 * PZI.bl_rms[chan] * sqrt(2.0 * (float) PSA.a_e_rise[chan]) *
+                 PSA.a_e_factor[chan] * gain/1593.0 * (1.0 - 1593.0/e_ctc));        // 1593 keV = DEP
+        s2 -= AOE_CORRECT_EDEP * (PSA.ae_pos[chan] - PSA.ae_cut[chan]) * (1.0 - e_ctc*e_ctc/1593.0/1593.0);  // quadratic; FIXME: Add limit at low e_ctc?
+        if (e_ctc >= 1510 && e_ctc <= 2500 &&    // DE and SE peaks
+            a_e_pos[chan] > 100 && s2 >= PSA.ae_cut[chan]) {
+          int e2 = (e_ctc + 0.5 - 1500.0);
+          if (lq < PSA.lq_lim[chan]) his[600+chan][4000 + e2]++;  // histogram E gated by A/E and lq
+          else                       his[600+chan][5000 + e2]++;  // histogram E gated by A/E and cut by lq
         }
       }
 
@@ -640,6 +685,32 @@ int main(int argc, char **argv) {
     }
 
     if (step == 5) {
+      // find lq cut values
+      float cfwhm = 1.7; // 4 sigma
+      //cfwhm = 2.1; // 5 sigma
+      //cfwhm = 3.0; // 7 sigma
+      printf("\n                lq\n");
+      printf("Chan |   pos    area   FWHM      cut1   cut2  finalcut|\n");
+      for (chan = 0; chan < 200; chan++) {
+        fwhm = 8;
+        area = 0;
+        pos = autopeak3(his[600 + chan], 6000, 7000, &area, &fwhm) - 6000.0;
+        if (area < 200) continue;
+        float cut = pos + cfwhm * fwhm;
+        if (fwhm > 15) cut = pos + 0.5 * fwhm + (cfwhm - 0.5) * 15.0;
+        int s1 =0; s2 = 0;
+        for (i=6000; i<7000; i++) s1 += his[600 + chan][i];
+        for (i=6000; i<7000; i++) {
+          s2 += his[600 + chan][i];
+          if (s2 > 0.995 * s1) break;
+        }
+        i -= 6000;
+        PSA.lq_lim[chan] = (cut<i ? cut : i);
+        printf(" %3d | %5.1f %7.0f %6.2f %8.1f %d %8.1f\n", chan, pos, area, fwhm, cut, i, PSA.lq_lim[chan]);
+        his[600+chan][6000+(int)(PSA.lq_lim[chan]+0.5)] = 500;
+      }
+      printf("\n\n");
+
       // re-calculate and report cut acceptance values
       fp = fopen("aoe_eff.txt", "w");
       fprintf(fp, "#chan  SEP   err    DEP   err   Continuum err\n");
