@@ -41,9 +41,11 @@ int main(int argc, char **argv) {
   CTCinfo CTC;
 
   // skim data
-  SavedData **sd;
+  SavedData  **sd1;
+  SavedData2 **sd2;
+  int      sd_version = 1;
   int      chan;
-  float    drift, lamda;
+  float    drift, lamda, aovere;
   double   e_raw;
   int      nsd = 0, isd = 0;  // number of saved data, and pointer to saved data id
 
@@ -74,6 +76,10 @@ int main(int argc, char **argv) {
 
   // read saved skim data from f_in
   fread(&nsd, sizeof(int), 1, f_in);
+  if (nsd == -2) {
+    sd_version = 2;
+    fread(&nsd, sizeof(int), 1, f_in);
+  }
   fread(&Dets[0], sizeof(Dets[0]), NMJDETS, f_in);
   fread(&runInfo, sizeof(runInfo) - 8*sizeof(int), 1, f_in);
   if (runInfo.idNum == 0) {
@@ -81,13 +87,23 @@ int main(int argc, char **argv) {
     fread(&(runInfo.flashcam), 8*sizeof(int), 1, f_in);
   }
   /* malloc space for SavedData */
-  if ((sd = malloc(nsd*sizeof(*sd))) == NULL ||
-      (sd[0] = malloc(nsd*sizeof(SavedData))) == NULL) {
+  if ((sd_version == 1 &&
+       ((sd1 = malloc(nsd*sizeof(*sd1))) == NULL ||
+        (sd1[0] = malloc(nsd*sizeof(*sd1[0]))) == NULL)) ||
+      (sd_version == 2 &&
+       ((sd2 = malloc(nsd*sizeof(*sd2))) == NULL ||
+        (sd2[0] = malloc(nsd*sizeof(*sd2[0]))) == NULL))) {
     printf("ERROR in CTcal.c; cannot malloc SavedData!\n");
     exit(-1);
   }
-  for (i=1; i<nsd; i++) sd[i] = sd[i-1] + 1;
-  fread(*sd, sizeof(SavedData), nsd, f_in);
+  printf("Skim data mode = %d\n", sd_version);
+  if (sd_version == 1) {
+    for (i=1; i<nsd; i++) sd1[i] = sd1[i-1] + 1;
+    fread(*sd1, sizeof(**sd1), nsd, f_in);
+  } else {   // sd_version == 2
+    for (i=1; i<nsd; i++) sd2[i] = sd2[i-1] + 1;
+    fread(*sd2, sizeof(**sd2), nsd, f_in);
+  }
   printf(" Skim is data from runs starting at number %d from file %s\n",
          runInfo.runNumber, runInfo.filename);
 
@@ -126,10 +142,19 @@ int main(int argc, char **argv) {
 
     for (isd = 0; isd < nsd; isd++) {
       // if (isd%(nsd/10) == 0) printf(">>  event %7d (%d/10\n", isd, isd*10/nsd);
-      chan   = sd[isd]->chan;
-      e_raw  = sd[isd]->e;
-      drift  = sd[isd]->drift;
-      lamda  = sd[isd]->lamda;
+      if (sd_version == 1) {
+        chan   = sd1[isd]->chan;
+        e_raw  = sd1[isd]->e;
+        drift  = sd1[isd]->drift;
+        aovere = sd1[isd]->a_over_e;
+        lamda  = sd1[isd]->lamda;
+      } else {                       // sd_version == 2
+        chan   = sd2[isd]->chan;
+        e_raw  = sd2[isd]->e;
+        drift  = sd2[isd]->drift;
+        aovere = sd2[isd]->a_over_e;
+        lamda  = sd2[isd]->lamda;
+      }
       if (chan < clo || chan > chi) continue;
       if (chan < 100 && (e_raw < elo || e_raw > ehi)) continue;
       if (chan > 99 && (e_raw < elo/3.4 || e_raw > ehi/3.2)) continue;
@@ -194,7 +219,7 @@ int main(int argc, char **argv) {
       if (f_out_2d && step == 4 && chan == CHAN_2D && e_ctc >= roi_elo && e_ctc <= roi_elo+700)
         fprintf(f_out_2d, "%4d %9.3f %8.3f  %8.3f %6.3f %10.3f %6.3f %10.2f\n",
                 chan, e_ctc, e_raw*gain, drift, drift*CTC.e_dt_slope[chan]*gain,
-                lamda, drift*CTC.e_lamda_slope[chan]*gain, sd[isd]->a_over_e);
+                lamda, drift*CTC.e_lamda_slope[chan]*gain, aovere);
 
       /* find optimum drift-time correction for energy */
       /* energy drift-time / trapping correction... */

@@ -1807,7 +1807,7 @@ int PSA_info_read(MJRunInfo *runInfo, PSAinfo *PSA) {
 
   int    i, n, ret_value=0;
   char   line[256];
-  float  a, b, c, d, e, f, g, h;
+  float  a, b, c, d, e, f, g, h,q;
   int    j, k, l, m, o, lo, hi;
   FILE   *f_in;
 
@@ -1823,6 +1823,7 @@ int PSA_info_read(MJRunInfo *runInfo, PSAinfo *PSA) {
     PSA->dcr_lim[i]        = 0;
     PSA->lamda_dt_slope[i] = 0;
     PSA->lamda_lim[i]      = 0;
+    PSA->lq_lim[i]         = -1;
   }
 
   if ((f_in = fopen("psa.input", "r"))) {
@@ -1830,10 +1831,10 @@ int PSA_info_read(MJRunInfo *runInfo, PSAinfo *PSA) {
     printf("\n Initializing PSA values from file psa.input\n\n");
     while (fgets(line, sizeof(line), f_in)) {
       if (line[0] == '#' || strlen(line) < 4) continue;
-      e = 0; f = 1;
+      e = 0; f = 1; q = -1;
       if ((n=sscanf(line,
-                    "%d %f %f %f %f %f %f %f %f",
-                    &i,&a,&b,&c,&d,&e,&f,&g,&h)) < 9 ||
+                    "%d %f %f %f %f %f %f %f %f %f",
+                    &i,&a,&b,&c,&d,&e,&f,&g,&h,&q)) < 9 ||
           i < 0 || i > 199) {
         printf(" ERROR; reading of psa.input file failed! line: %s\n", line);
         fclose(f_in);
@@ -1847,19 +1848,20 @@ int PSA_info_read(MJRunInfo *runInfo, PSAinfo *PSA) {
       PSA->dcr_lim[i]        = f;
       PSA->lamda_dt_slope[i] = g;
       PSA->lamda_lim[i]      = h;
+      PSA->lq_lim[i]         = q;
     }
     fclose(f_in);
 
     if (VERBOSE) {
       for (i=0; i<200; i++) {
         if (i%100 == 0)
-          printf("Chan  ae_dt_slope ae_e_slope  ae_pos  ae_cut | dcr_dt_slope dcr_lim | lamda_dt_slope lamda_lim\n");
-        //           1         7.50      10.70 1007.50 1005.60 |         0.42    1.00 |           0.42      1.00
-        //        %4dx  %11.2fxxxxx %10.2fxxxx %7.2fxx %7.2fxx | %12.2fxxxxxx %7.2fxx | %14.2fxxxxxxxx %9.2fxxxx
+          printf("Chan  ae_dt_slope ae_e_slope  ae_pos  ae_cut | dcr_dt_slope dcr_lim | lamda_dt_slope lamda_lim | lq_lim\n");
+        //           1         7.50      10.70 1007.50 1005.60 |         0.42    1.00 |           0.42      1.00 |   -1.0
+        //        %4dx  %11.2fxxxxx %10.2fxxxx %7.2fxx %7.2fxx | %12.2fxxxxxx %7.2fxx | %14.2fxxxxxxxx %9.2fxxxx | %6.1fx
         if (i%100 < runInfo->nGe)
-          printf("%4d  %11.2f %10.2f %7.2f %7.2f | %12.2f %7.2f | %14.2f %9.2f\n",
+          printf("%4d  %11.2f %10.2f %7.2f %7.2f | %12.2f %7.2f | %14.2f %9.2f | %6.1f\n",
                  i, PSA->ae_dt_slope[i], PSA->ae_e_slope[i], PSA->ae_pos[i], PSA->ae_cut[i],
-                 PSA->dcr_dt_slope[i], PSA->dcr_lim[i], PSA->lamda_dt_slope[i], PSA->lamda_lim[i]);
+                 PSA->dcr_dt_slope[i], PSA->dcr_lim[i], PSA->lamda_dt_slope[i], PSA->lamda_lim[i], PSA->lq_lim[i]);
       }
     }
   }
@@ -1944,13 +1946,13 @@ int PSA_info_write(MJRunInfo *runInfo, PSAinfo *PSA) {
   for (i=0; i<200; i++) {
     if (i%100 == 0)
       fprintf(f_out,
-              "#Chan  ae_dt_slope ae_e_slope  ae_pos  ae_cut  dcr_dt_slope dcr_lim  lamda_dt_slope lamda_lim\n");
-      //           1         7.50      10.70 1007.50 1005.60          0.42    1.00            0.42      1.00
-      //       %5dxx  %11.2fxxxxx %10.2fxxxx %7.2fxx %7.2fxx  %12.2fxxxxxx %7.2fxx  %14.2fxxxxxxxx %9.2fxxxx
+              "#Chan  ae_dt_slope ae_e_slope  ae_pos  ae_cut  dcr_dt_slope dcr_lim  lamda_dt_slope lamda_lim   lq_lim\n");
+      //           1         7.50      10.70 1007.50 1005.60          0.42    1.00            0.42      1.00     -1.0
+      //       %5dxx  %11.2fxxxxx %10.2fxxxx %7.2fxx %7.2fxx  %12.2fxxxxxx %7.2fxx  %14.2fxxxxxxxx %9.2fxxxx %8.1fxxx
     if (i%100 < runInfo->nGe)
-      fprintf(f_out, "%5d  %11.2f %10.2f %7.2f %7.2f  %12.2f %7.2f  %14.2f %9.2f\n",
+      fprintf(f_out, "%5d  %11.2f %10.2f %7.2f %7.2f  %12.2f %7.2f  %14.2f %9.2f %8.1f\n",
               i, PSA->ae_dt_slope[i], PSA->ae_e_slope[i], PSA->ae_pos[i], PSA->ae_cut[i],
-              PSA->dcr_dt_slope[i], PSA->dcr_lim[i], PSA->lamda_dt_slope[i], PSA->lamda_lim[i]);
+              PSA->dcr_dt_slope[i], PSA->dcr_lim[i], PSA->lamda_dt_slope[i], PSA->lamda_lim[i], PSA->lq_lim[i]);
   }
 
   fclose(f_out);

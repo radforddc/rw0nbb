@@ -189,6 +189,7 @@ typedef struct {
   float dcr_lim[200];          // cut limit for DCR value
   float lamda_dt_slope[200];   // factor for drift-time correction of lamda = 1/tau
   float lamda_lim[200];        // cut limit for lamda = 1/tau value
+  float lq_lim[200];           // cut limit for lq = late charge drift value
   // info to be read from filters.input:
   int e_ctc_rise[200];         // individual trapezoid integration time for e_ctc (samples)
   int e_ctc_flat[200];         // individual trapezoid flat-top time for e_ctc (samples)
@@ -206,8 +207,18 @@ typedef struct {
   float  a_over_e;   // raw (uncorrected) A/E value
   float  dcr;        // raw DCR value; slope of PZ-corrected tail using a trapezoid
   float  lamda;      // decay-time value from 2-parameter fit to PZ-uncorrected tail
-  int    t0, t90, t100; // time points of signal
+  int    t0, t95, t100; // time points of signal
 } SavedData;         // saved by skim.c; used by CTcal.c and PSAcal.c
+typedef struct {
+  int    chan;       // detector channel number
+  float  drift;      // drift time for charge trapping correction to energy
+  float  a_over_e;   // raw (uncorrected) A/E value
+  float  dcr;        // raw DCR value; slope of PZ-corrected tail using a trapezoid
+  float  lamda;      // decay-time value from 2-parameter fit to PZ-uncorrected tail
+  float  lq;         // late charge drift value for potential additional cut
+  double e;          // raw energy [ADC]
+  int    t0, t80, t95, t100; // time points of signal
+} SavedData2;        // saved by skim.c; used by CTcal.c and PSAcal.c
 
 /* ---------- function declarations ---------- */
 
