@@ -122,7 +122,7 @@ int eventprocess(MJDetInfo *Dets, MJRunInfo *runInfo, int nChData, BdEvent *ChDa
        600 - 799   clean energy (e_ctc or trapmax) after data cleaning; ADC units
        800 - 999   dirty energy (e_ctc or trapmax) after data cleaning; 0.5 keV/ch
       1000 - 1199  clean energy (e_ctc or trapmax) after data cleaning; 0.5 keV/ch
-      1200 - 1399  A/E histograms
+      1200 - 1399  A/E histograms and lq
       1400 - 1599  DCR and lamda histograms
       1600 - 1799  baseline mean, RMS, and slope (+4000 when trapmax is < 50)
       1800 - 1999  tmax from trapmax (4-2-4) and 2000+t_1 (1% time)
@@ -191,8 +191,8 @@ int eventprocess(MJDetInfo *Dets, MJRunInfo *runInfo, int nChData, BdEvent *ChDa
     for (i=1; i<HIS_COUNT; i++) his2[i] = his2[i-1] + 8192;
     if (EVENTLIST) {
       f_evl = fopen("evl.txt", "w");
-      fprintf(f_evl, "#chan e_ctc    timestamp    LDA.bits.bits  detector"
-                     " Qx      A/E     DCR  lamda    Run  t95-t0 t100-t95  A/E,DCR,lamda - limit\n");
+      fprintf(f_evl, "#chan e_ctc    timestamp    LDA.bits.bits   detector"
+                     " Qx      A/E     DCR  lamda    Run  t95-t0 t100-t95  A/E,DCR,lamda,lq - limit\n");
     }
 #endif
 
@@ -365,15 +365,19 @@ int eventprocess(MJDetInfo *Dets, MJRunInfo *runInfo, int nChData, BdEvent *ChDa
       } else if (i < 800) {
         sprintf(spname, "%d; E, lamda cut [0.5 keV]; ch %d", i, i%200);
       } else if (i < 1000) {
-        sprintf(spname, "%d; E, all cuts [0.5 keV]; ch %d", i, i%200);
+        sprintf(spname, "%d; E, A/E+DCR+lamd cuts [0.5 keV]; ch %d", i, i%200);
       } else if (i < 1200) {
-        sprintf(spname, "%d; E, HG/LG only, all cuts [0.5 keV]; ch %d", i, i%200);
+        sprintf(spname, "%d; E, lq cut [0.5 keV]; ch %d", i, i%200);
       } else if (i < 1400) {
-        sprintf(spname, "%d; E, Dirty signals incl. gran.; ch %d", i, i%200);
+        sprintf(spname, "%d; E, A/E+lq cuts [0.5 keV]; ch %d", i, i%200);
       } else if (i < 1600) {
-        sprintf(spname, "%d; E, Dirty signals excl. gran.; ch %d", i, i%200);
+        sprintf(spname, "%d; E, all cut [0.5 keV]; ch %d", i, i%200);
+      } else if (i < 1800) {
+        sprintf(spname, "%d; E, HG/LG only, all cuts [0.5 keV]; ch %d", i, i%200);
+      } else if (i < 2000) {
+        sprintf(spname, "%d; E, Dirty signals incl. gran.; ch %d", i, i%200);
       } else {
-        sprintf(spname, "%d;", i);
+        sprintf(spname, "%d; E, Dirty signals excl. gran.; ch %d", i, i%200);
       }
       write_his(his2[i], 8192, i, spname, f_out2);
     }
@@ -664,20 +668,21 @@ int eventprocess(MJDetInfo *Dets, MJRunInfo *runInfo, int nChData, BdEvent *ChDa
 #ifdef DO_PSA
       /* -=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=- */
 
-      /* This section of signal processing is not requred for somee programs (e.g. noise,
+      /* This section of signal processing is not requred for some programs (e.g. noise,
        *      presort, and deadtime) so it is included only by defining the flag DO_PSA
        */
 
       double e_raw, e_adc, e_ctc, e_lamda, gain;
-      float  fsignal[8192], drift, aovere, dcr, lamda;
-      int    t0, t95, t100, ebin, a_e_good = 0, a_e_high = 0, dcr_good = 0, lamda_good = 0;
+      float  fsignal[8192], drift, aovere, dcr, lamda, lq;
+      int    t0, t80, t95, t100, ebin;
+      int    a_e_good = 0, a_e_high = 0, dcr_good = 0, lamda_good = 0, lq_good = 0;
       if (chan < 100) {
         gain = Dets[chan].HGcalib[0];
       } else {
         gain = Dets[chan-100].LGcalib[0];
       }
 
-      /* find t100 and t95*/
+      /* find t100, t95, and t80 */
       t100 = 700;                 // FIXME? arbitrary 700?
       for (i = t100+1; i < 1500; i++)
         if (signal[t100] < signal[i]) t100 = i;
@@ -685,8 +690,16 @@ int eventprocess(MJDetInfo *Dets, MJRunInfo *runInfo, int nChData, BdEvent *ChDa
       int bl = 0;
       for (i=300; i<400; i++) bl += signal[i];
       bl /= 100;
+      i = bl + (signal[t100] - bl)*19/20;
       for (t95 = t100-1; t95 > 500; t95--)
-        if ((signal[t95] - bl) <= (signal[t100] - bl)*19/20) break;
+        if (signal[t95] <= i) break;
+
+      i = bl + (signal[t100] - bl)*4/5;
+      for (t80 = t95; t80 > 500; t80--)
+        if (signal[t80] <= i) break;
+      // begin evaluation of lq (late charge)
+      lq = (float) (signal[t80+1] - i) / (float) (signal[t80+1] - signal[t80]); // floating remainder for t80
+      lq *= (signal[t100] - (signal[t80+1] + i)/2);  // charge (not yet) arriving during that remainder
 
       if (t100   > 1300 ||      // important for cleaning, gets rid of pileup
           t95+760 > siglen) {   // dcr trap extends past end of signal
@@ -781,6 +794,10 @@ int eventprocess(MJDetInfo *Dets, MJRunInfo *runInfo, int nChData, BdEvent *ChDa
         dcr = float_trap_fixed(fsignal, t95+50, 160, 800) / 40.0;
       }
 
+      /* get late charge (lq) = delay in charge arriving after t80 */
+      lq += float_trap_fixed(fsignal, t80+1, 100, 100);
+      lq /= e_raw/100.0;
+
       /* do drift-time and energy corrections to A/E, DCR, lamda */
       float dtc = drift*3.0*2614.0/e_adc;   // in (x)us, for DT- correction to A/E
       if (chan%100 == 50) dtc *= 3.0;       // special hack for detector 50; has especially strong variation
@@ -837,6 +854,18 @@ int eventprocess(MJDetInfo *Dets, MJRunInfo *runInfo, int nChData, BdEvent *ChDa
         if (lamda < 3600)
           his[1400+chan][(int) (6000.5 + lamda/2.0)]++; // coarse scale to look for alpha distribution
       }
+      /* ------- do lq cut ------- */
+      lq_good = 0;
+      if (lq > 0 && e_ctc > 1000) {
+        if (lq < PSA.lq_lim[chan]) lq_good = 1;
+        if (lq < 300) {
+          his[1200+chan][(int) (4000.5 + lq)]++;
+          his[1200+chan][(int) (5000.5 + lq - PSA.lq_lim[chan])]++;
+          if (!a_e_good) his[1400+chan][(int) (5500.5 + lq - PSA.lq_lim[chan])]++;
+        }
+        if (lq < 3600)
+          his[1200+chan][(int) (6000.5 + lq/2.0)]++; // coarse scale to look for alpha distribution
+      }
       /* -=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=- */
 
       if (0 && e_raw > 2000 && e_raw < 2010)
@@ -844,21 +873,22 @@ int eventprocess(MJDetInfo *Dets, MJRunInfo *runInfo, int nChData, BdEvent *ChDa
       if (dirty_sig) {  // DIRTY signals
         if (e_adc >= 0 && e_adc < 8190) his[400+chan][(int) (e_adc + 0.5)]++;
         his[800+chan][ebin]++;
-        his2[1200+chan][ebin]++;
-        his2[99][1200+chan]++;
+        his2[1800+chan][ebin]++;
+        his2[99][1800+chan]++;
         if ((dirty_sig&48) == 0) { // exclude granularity and saturated signals
-          his2[1400+chan][ebin]++;
-          his2[99][1400+chan]++;
+          his2[2000+chan][ebin]++;
+          his2[99][2000+chan]++;
         }
         if (EVENTLIST && e_ctc > EVENTLIST && e_ctc < EVENTLISTMAX && chan < 100) {
           float ef = (0 && CTC.best_dt_lamda[chan] ? e_lamda : e_ctc);
-          fprintf(f_evl, "%3d %7.1f %15lld %d%d%d.%d%d%d%d.%d%d%d%d",
-                  chan, ef, time, lamda_good, dcr_good, a_e_good,
+          fprintf(f_evl, "%3d %7.1f %15lld %d%d%d%d.%d%d%d%d.%d%d%d%d",
+                  chan, ef, time, lq_good, lamda_good, dcr_good, a_e_good,
                   DBIT(7), DBIT(6), DBIT(5), DBIT(4), DBIT(3), DBIT(2), DBIT(1), DBIT(0));
-          fprintf(f_evl, " %s %cG Q0  %8.1f %6.1f %6.1f   %d %3d %3d  %8.2f %6.2f %6.2f\n",
+          fprintf(f_evl, " %s %cG Q0  %8.1f %6.1f %6.1f   %d %3d %3d  %8.2f %6.2f %6.2f %6.2f\n",
                   Dets[chan%100].StrName, (chan > 99 ? 'L' : 'H'),
                   aovere, dcr, lamda, runInfo->runNumber, t95-t0, t100-t95,
-                  aovere - PSA.ae_cut[chan], dcr - PSA.dcr_lim[chan], lamda - PSA.lamda_lim[chan]);
+                  aovere - PSA.ae_cut[chan], dcr - PSA.dcr_lim[chan],
+                  lamda - PSA.lamda_lim[chan], lq - PSA.lq_lim[chan]);
         }
 
       } else if (!bad[ievt] && !pulser) {     // CLEAN non-pulser signals
@@ -867,6 +897,7 @@ int eventprocess(MJDetInfo *Dets, MJRunInfo *runInfo, int nChData, BdEvent *ChDa
         his[1000+chan][ebin]++;
 
         // ----------------------------------------------------------------
+        /*
         // histogram drift time (t95 - t0)
         if (t95 >= t0 && t95 < t0+450 && e_ctc > 1000 && e_ctc < 3000) {
           his[2000+chan][5000+t95-t0]++;
@@ -875,6 +906,16 @@ int eventprocess(MJDetInfo *Dets, MJRunInfo *runInfo, int nChData, BdEvent *ChDa
           if (!dcr_good) his[2000+chan][6500+t95-t0]++;
           if (a_e_good && !dcr_good) his[2000+chan][7000+t95-t0]++;
           if (a_e_good && dcr_good) his[2000+chan][7500+t95-t0]++;
+        }
+        */
+        // histogram drift time (t80 - t0)
+        if (t80 >= t0 && t80 < t0+450 && e_ctc > 1000 && e_ctc < 3000) {
+          his[2000+chan][5000+t80-t0]++;
+          if (a_e_good) his[2000+chan][5500+t80-t0]++;
+          if (dcr_good) his[2000+chan][6000+t80-t0]++;
+          if (!dcr_good) his[2000+chan][6500+t80-t0]++;
+          if (a_e_good && !dcr_good) his[2000+chan][7000+t80-t0]++;
+          if (a_e_good && dcr_good) his[2000+chan][7500+t80-t0]++;
         }
         // ----------------------------------------------------------------
         /* histogram final results for clean signals */
@@ -893,9 +934,21 @@ int eventprocess(MJDetInfo *Dets, MJRunInfo *runInfo, int nChData, BdEvent *ChDa
           his2[600+chan][ebin]++;
           his2[99][600+chan]++;
         }
-        if (a_e_good && dcr_good && lamda_good) { // all cuts
+        if (a_e_good && dcr_good && lamda_good) { // A/E+DCR+lamda cuts
           his2[800+chan][ebin]++;
           his2[99][800+chan]++;
+        }
+        if (lq_good) {              // lq cut
+          his2[1000+chan][ebin]++;
+          his2[99][600+chan]++;
+        }
+        if (a_e_good && lq_good) { // A/E+lq cuts
+          his2[1200+chan][ebin]++;
+          his2[99][1200+chan]++;
+        }
+        if (a_e_good && dcr_good && lamda_good && lq_good) { // ALL cuts
+          his2[1400+chan][ebin]++;
+          his2[99][1400+chan]++;
           int hg_lg_only = 1;
           int jevt;
           for (jevt = 0; jevt < nChData; jevt++) {
@@ -903,8 +956,8 @@ int eventprocess(MJDetInfo *Dets, MJRunInfo *runInfo, int nChData, BdEvent *ChDa
                 chan == ChData[jevt]->chan - 100) hg_lg_only = 0;
           }
           if (hg_lg_only) {         // all cuts and only the HG or LG ch is hit
-            his2[1000+chan][ebin]++;
-            his2[99][1000+chan]++;
+            his2[1600+chan][ebin]++;
+            his2[99][1600+chan]++;
           }
           // ----------------------------------------------------------------
 
@@ -956,14 +1009,16 @@ int eventprocess(MJDetInfo *Dets, MJRunInfo *runInfo, int nChData, BdEvent *ChDa
 
         if (EVENTLIST && e_ctc > EVENTLIST && e_ctc < EVENTLISTMAX && chan < 100) {
           float ef = (0 && CTC.best_dt_lamda[chan] ? e_lamda : e_ctc);
-          fprintf(f_evl, "%3d %7.1f %15lld %d%d%d.%d%d%d%d.%d%d%d%d",
-                  chan, ef, time, lamda_good, dcr_good, a_e_good,
+          fprintf(f_evl, "%3d %7.1f %15lld %d%d%d%d.%d%d%d%d.%d%d%d%d",
+                  chan, ef, time, lq_good, lamda_good, dcr_good, a_e_good,
                   DBIT(7), DBIT(6), DBIT(5), DBIT(4), DBIT(3), DBIT(2), DBIT(1), DBIT(0));
-          fprintf(f_evl, " %s %cG Q%d  %8.1f %6.1f %6.1f   %d %3d %3d  %8.2f %6.2f %6.2f\n",
-                  Dets[chan%100].StrName, (chan > 99 ? 'L' : 'H'), a_e_good + 2*dcr_good + 4*lamda_good,
+          fprintf(f_evl, " %s %cG Q%x  %8.1f %6.1f %6.1f   %d %3d %3d  %8.2f %6.2f %6.2f %6.2f\n",
+                  Dets[chan%100].StrName, (chan > 99 ? 'L' : 'H'),
+                  a_e_good + 2*dcr_good + 4*lamda_good + 8*lq_good,
                   aovere, dcr, lamda, runInfo->runNumber, t95-t0, t100-t95,
-                  aovere - PSA.ae_cut[chan], dcr - PSA.dcr_lim[chan], lamda - PSA.lamda_lim[chan]);
-        }
+                  aovere - PSA.ae_cut[chan], dcr - PSA.dcr_lim[chan],
+                  lamda - PSA.lamda_lim[chan], lq - PSA.lq_lim[chan]);
+         }
       }
       // ----------------------------------------------------------------
 #endif  // end if #ifdef DO_PSA

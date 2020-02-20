@@ -1,3 +1,5 @@
+/* presort for flashcam data */
+
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
