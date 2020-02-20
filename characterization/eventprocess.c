@@ -676,6 +676,8 @@ int eventprocess(MJDetInfo *Dets, MJRunInfo *runInfo, int nChData, BdEvent *ChDa
       float  fsignal[8192], drift, aovere, dcr, lamda, lq;
       int    t0, t80, t95, t100, ebin;
       int    a_e_good = 0, a_e_high = 0, dcr_good = 0, lamda_good = 0, lq_good = 0;
+
+      if (chan%100 > NMJDETS) continue;   // 2020-02-20 FIXME: why is this suddenly necessary?
       if (chan < 100) {
         gain = Dets[chan].HGcalib[0];
       } else {
