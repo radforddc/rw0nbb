@@ -260,6 +260,8 @@ int main(int argc, char **argv) {
     s3 = lamda - PSA.lamda_dt_slope[chan] * drift - PSA.lamda_lim[chan];
     if (SUBTR_DCR_MEAN) s3 -= (float) dcr_mean[chan][4000 + (int) e_adc/2] / 10.0; // correct for residual INL
 
+    lq -= PSA.lq_dt_slope[chan] * dtc;  // do DT correction to lq
+
     if ((j = lrintf(s2)) > -500 && j < 500) his[1800+chan][3000+j]++;
     if ((j = lrintf(s1)) > -500 && j < 500) his[1800+chan][5000+j]++;
     if ((j = lrintf(s3)) > -500 && j < 500) his[1800+chan][6000+j]++;
@@ -285,7 +287,6 @@ int main(int argc, char **argv) {
               s1, s3, t100 - t95);
 
   }
-
 
   printf(">>  All done...\n");
 

@@ -191,6 +191,7 @@ typedef struct {
   float dcr_lim[200];          // cut limit for DCR value
   float lamda_dt_slope[200];   // factor for drift-time correction of lamda = 1/tau
   float lamda_lim[200];        // cut limit for lamda = 1/tau value
+  float lq_dt_slope[200];      // factor for drift-time correction of lq value
   float lq_lim[200];           // cut limit for lq = late charge drift value
   // info to be read from filters.input:
   int e_ctc_rise[200];         // individual trapezoid integration time for e_ctc (samples)

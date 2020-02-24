@@ -859,6 +859,7 @@ int eventprocess(MJDetInfo *Dets, MJRunInfo *runInfo, int nChData, BdEvent *ChDa
       /* ------- do lq cut ------- */
       lq_good = 0;
       if (lq > 0 && e_ctc > 1000) {
+        lq -= PSA.lq_dt_slope[chan] * dtc;  // do DT correction to lq
         if (lq < PSA.lq_lim[chan]) lq_good = 1;
         if (lq < 300) {
           his[1200+chan][(int) (4000.5 + lq)]++;
