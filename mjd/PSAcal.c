@@ -64,12 +64,12 @@ int main(int argc, char **argv) {
   double   e_raw;
   int      nsd = 0, isd = 0;  // number of saved data, and pointer to saved data id
 
-  float    aovere_norm, a_e_pos[200], a_e_pos1[200];
+  float    aovere_norm, a_e_pos[200], a_e_pos1[200], lq_pos[200] = {0};
   float    dcr, lamda;
 
   double e_ctc, e_adc, gain;
   float  pos, area, fwhm, s1, s2, s3, s4, s5, ppos[200][6] = {{0}};
-  int    i, j, k, kk, n, roi_elo;
+  int    i, j, k, kk, n, roi_elo, ae_good;
   int    *his[HIS_COUNT];
   int    *dcr_mean[200], mean_dcr_ready = 0;
   FILE   *f_out, *f_out_2d = 0, *fp;
@@ -192,10 +192,10 @@ int main(int argc, char **argv) {
   // end of initialization
   // start loop over events in skim data
 
-  // ---------------------- steps 1-5 ----------------------
-  for (int step = 1; step <= 6; step++) {
-    printf(" ******************** Step %d of 6 ********************\n", step);
-    if (step == 6 && sd_version == 1) continue; 
+  // ---------------------- steps 1-7 ----------------------
+  for (int step = 1; step <= 7; step++) {
+    printf(" ******************** Step %d of 7 ********************\n", step);
+    if (step == 7 && sd_version == 1) continue; 
 
     /*
      * Step 1: Histogram: Raw A/E
@@ -211,8 +211,12 @@ int main(int argc, char **argv) {
      *            to get: Final spectra, A/E acceptances
      *         Also make file for 2D plots of A/E|E|CTC if required
      *            and get lq DT-correction factor
+     *         and histogram raw LQ distribution to get mode position
      * Step 6: Histogram: E_ctc cut by A/E_ctc_e and lq
      *            to get: Final spectra, A/E acceptances
+     *         Histogram LQ with various DT correction factors
+     *            to get optimum correction and cut value
+     * Step 7: Histogram final corrected LQ shifted to cut value
      */
 
     for (isd = 0; isd < nsd; isd++) {
@@ -265,6 +269,51 @@ int main(int argc, char **argv) {
       }
       e_ctc = e_adc * gain;
 
+      /* -------------------- DCR and Lamda : adjustments and cuts --------------------- */
+      if (step == 2) {
+        /* Step 2: Histogram: DCR vs. DT in his[1000], lamda vs. DT in his[1200]
+                   to get DCR_DT slope, lamda_DT slope */
+        if ((s1 = 100.5 + dcr) > 0 && s1 < 200) {
+          // try multiple correction factors for DT dependence of DCR
+          for (j=1; j<35; j++) {
+            if (s1 > 0 && s1 < 200) his[1000+chan][j*200 + (int) s1]++;
+            s1 -= drift;
+          }
+        }
+        // lamda is taken from the 1/tau value fitted with frac2 fixed
+        if ((s1 = 100.5 + lamda) > 0 && s1 < 200) {
+          // try multiple DT correction factors for preamp lamda
+          for (j=1; j<35; j++) {
+            if (s1 > 0 && s1 < 200) his[1200+chan][j*200 + (int) s1]++;
+            s1 -= 0.8 * drift;
+          }
+        }
+
+      } else if (step == 3) {
+        /* Step 3: Histogram: DCR_DT, lamda_DT in his[1600], to get peak positions for alignment */
+        if ((s1 = 500.5 + dcr) > 200 && s1 < 1100) his[1600+chan][(int) s1]++;
+        s1 -= PSA.dcr_dt_slope[chan] * drift;
+        if (s1 > 200 && s1 < 1100) his[1600+chan][1000 + (int) s1]++;
+        if (SUBTR_DCR_MEAN) s1 -= (float) dcr_mean[chan][(int) e_adc/2] / 10.0;        // correct for residual INL
+        if (s1 > 200 && s1 < 1100) his[1600+chan][2000 + (int) s1]++;
+
+        if ((s1 = 500.5 + lamda) > 200 && s1 < 1100) his[1600+chan][4000 + (int) s1]++;
+        s1 -= PSA.lamda_dt_slope[chan] * drift;
+        if (s1 > 200 && s1 < 1100) his[1600+chan][5000 + (int) s1]++;
+        if (SUBTR_DCR_MEAN) s1 -= (float) dcr_mean[chan][4000 + (int) e_adc/2] / 10.0; // correct for residual INL
+        if (s1 > 200 && s1 < 1100) his[1600+chan][6000 + (int) s1]++;
+
+      } else if (step == 4) {
+        /* Step 4: Histogram: final DCR, lamda, moved to cut value */
+        s1 = 500.5 + dcr - PSA.dcr_dt_slope[chan] * drift;
+        if (SUBTR_DCR_MEAN) s1 -= (float) dcr_mean[chan][(int) e_adc/2] / 10.0;        // correct for residual INL
+        if (s1 > 200 && s1 < 1100) his[1600+chan][3000 + (int) (s1 - PSA.dcr_lim[chan])]++;
+        s1 = 500.5 + lamda - PSA.lamda_dt_slope[chan] * drift;
+        if (SUBTR_DCR_MEAN) s1 -= (float) dcr_mean[chan][4000 + (int) e_adc/2] / 10.0; // correct for residual INL
+        if (s1 > 200 && s1 < 1100) his[1600+chan][7000 + (int) (s1 - PSA.lamda_lim[chan])]++;
+      }
+
+      /* -------------------- A/E and LQ : adjustments and cuts --------------------- */
       float dtc = drift*3.0*2614.0/e_adc;   // in (x)us, for DT- correction to A/E
       if (chan%100 == 50) dtc *= 3.0;       // special hack for detector 50; has especially strong variation
       float ec = e_ctc/1000.0 - 2.0;        // in MeV, for E-correction to A/E
@@ -329,8 +378,11 @@ int main(int argc, char **argv) {
             his[800+chan][j+4500]++;
           }
         }
+      }
 
-      } else if (step == 5) {
+      if (step >= 5) {  // check A/E cut (ae_good = 0 or 1)
+        if (a_e_pos[chan] <= 100) continue;    // CHECKME; all steps > 4 deal with A/E and LQ cuts
+        ae_good = 0;
         s2 = aovere2;
         // adjust for energy dependence of cut
         // first correct for series noise: assume 2*sigma cut
@@ -341,41 +393,47 @@ int main(int argc, char **argv) {
         // now deal with energy dependence of variation in A/E due to bremsstrahlung etc
         // s2 -= AOE_CORRECT_EDEP * (PSA.ae_pos[chan] - PSA.ae_cut[chan]) * (1.0 - e_ctc/1593.0);  // linear; FIXME: Add limit at low e_ctc?
         s2 -= AOE_CORRECT_EDEP * (PSA.ae_pos[chan] - PSA.ae_cut[chan]) * (1.0 - e_ctc*e_ctc/1593.0/1593.0);  // quadratic; FIXME: Add limit at low e_ctc?
+        if (s2 >= PSA.ae_cut[chan]) ae_good = 1;
+      }
 
+      if (step == 5 ) {
         // count events in narrow gate on DEP and SEP, and wider gates on bgnd
         if (e_ctc >= DEP_E - 2.5 && e_ctc < DEP_E + 2.5) {            // DEP; 5.0 keV
           his[800+chan][1]++;
-          if (s2 >= PSA.ae_cut[chan]) his[800+chan][2]++;
+          if (ae_good) his[800+chan][2]++;
         } else if ((e_ctc >= DEP_E - 28.0 && e_ctc < DEP_E - 6.0) ||
                    (e_ctc >= DEP_E + 6.0  && e_ctc < DEP_E + 24.0)) { // backgnd; 22+18 keV
           his[800+chan][3]++;
-          if (s2 >= PSA.ae_cut[chan]) his[800+chan][4]++;
+          if (ae_good) his[800+chan][4]++;
         } else if (e_ctc >= SEP_E - 2.5 && e_ctc < SEP_E + 2.5) {     // SEP; 5 keV
           his[800+chan][5]++;
-          if (s2 >= PSA.ae_cut[chan]) his[800+chan][6]++;
+          if (ae_good) his[800+chan][6]++;
         } else if ((e_ctc >= SEP_E - 30.0 && e_ctc < SEP_E - 6.0) ||
                    (e_ctc >= SEP_E + 6.0 && e_ctc < SEP_E + 22.0)) { // backgnd; 24+16 keV
           his[800+chan][7]++;
-          if (s2 >= PSA.ae_cut[chan]) his[800+chan][8]++;
+          if (ae_good) his[800+chan][8]++;
         } else if ((CAL_E > 2610 && e_ctc >= 2010.0 && e_ctc < 2070.0) ||  // continuum at ROI (Th-228)
                    (CAL_E < 2600 && e_ctc >= 2041.0 && e_ctc < 2081.0))  { // continuum at ROI (Co-56)
           his[800+chan][9]++;
-          if (s2 >= PSA.ae_cut[chan]) his[800+chan][10]++;
+          if (ae_good) his[800+chan][10]++;
         }
-        if (a_e_pos[chan] > 100 &&
-            e_ctc >= 1510 && e_ctc <= 2500) { // DE and SE peaks
+        if (e_ctc >= 1510 && e_ctc <= 2500) { // DE and SE peaks
           int e2 = (e_ctc + 0.5 - 1500.0);
           his[600+chan][e2]++;
           if (s2 >= PSA.ae_cut[chan])   his[600+chan][1000 + e2]++;
           if (s2 >= PSA.ae_cut[chan]-1) his[600+chan][2000 + e2]++;
           if (s2 >= PSA.ae_cut[chan]+1) his[600+chan][3000 + e2]++;
         }
+      }
 
-        if (sd_version > 1 && e_ctc >= 1400 &&
-            a_e_pos[chan] > 100 && s2 >= PSA.ae_cut[chan]) {
-          /* Step 5: Histogram A/E-gated LQ vs. DT in his[1400] to get LQ_DT slope */
-          s1 = lq;
-          if (chan%100 == 2) s1/=2.0; // detector 2 is unusual
+      if (sd_version > 1 && e_ctc >= 1400 && ae_good) {  /* deal with LQ */
+        if (step == 5) {
+          /* Step 5: Histogram A/E-gated LQ to get rough position */
+          if ((j = lrintf(lq+100.0)) > 0 && j < 600)
+            his[600+chan][6000 + j]++;  // histogram A/E-gated lq distribution
+        } else if (step == 6) {
+          /* Step 6: Histogram A/E-gated LQ vs. DT in his[1400] to get LQ_DT slope */
+          s1 = lq - lq_pos[chan];
           if (s1 > 0 && s1 < 200) {
             // try multiple correction factors for LQ dependence of DCR
             for (j=0; j<40; j++) {
@@ -383,72 +441,18 @@ int main(int argc, char **argv) {
               s1 -= 0.25*dtc;
             }
           }
-        }
-
-      } else if (step == 6) {
-        s2 = aovere2;
-        if (AOE_CORRECT_NOISE)
-          s2 -= (2.0 * PZI.bl_rms[chan] * sqrt(2.0 * (float) PSA.a_e_rise[chan]) *
-                 PSA.a_e_factor[chan] * gain/1593.0 * (1.0 - 1593.0/e_ctc));        // 1593 keV = DEP
-        s2 -= AOE_CORRECT_EDEP * (PSA.ae_pos[chan] - PSA.ae_cut[chan]) * (1.0 - e_ctc*e_ctc/1593.0/1593.0);  // quadratic; FIXME: Add limit at low e_ctc?
-        if (e_ctc >= 1510 && e_ctc <= 2500 &&    // DE and SE peaks
-            a_e_pos[chan] > 100 && s2 >= PSA.ae_cut[chan]) {
-          int e2 = (e_ctc + 0.5 - 1500.0);
-          if (sd_version > 1 && e_ctc >= 1400 &&
-              a_e_pos[chan] > 100 && s2 >= PSA.ae_cut[chan]) {
-            s1 = lq;
-            if ((j = lrintf(s1)) > 5 && j < 500)
-              his[600+chan][6000 + j]++;  // histogram A/E-gated lq distribution
-            s1 -= PSA.lq_dt_slope[chan]*dtc + PSA.lq_lim[chan];
-            if ((j = lrintf(s1)) > -400 && j < 1000)
-              his[600+chan][7000 + j]++;  // histogram A/E-gated lq distribution
-            if (s1 < 0) his[600+chan][4000 + e2]++;  // histogram E gated by A/E and lq
-            else          his[600+chan][5000 + e2]++;  // histogram E gated by A/E and cut by lq
+        } else if (step == 7) {
+          /* Step 7: Histogram final corrected LQ, shifted to cut position */
+          s1 = lq - PSA.lq_dt_slope[chan]*dtc - PSA.lq_lim[chan];
+          if ((j = lrintf(s1)) > -200 && j < 1000)
+            his[600+chan][7000 + j]++;
+          /* Histogram E gated by A/E and lq, or cut by lq  */
+          if (e_ctc >= 1510 && e_ctc <= 2500) {    // energies including DE and SE peaks
+            int e2 = (e_ctc + 0.5 - 1500.0);
+            if (s1 < 0) his[600+chan][4000 + e2]++;  // E gated by A/E and lq
+            else        his[600+chan][5000 + e2]++;  // E gated by A/E and cut by lq
           }
         }
-      }
-
-      if (step == 2) {
-        /* Step 2: Histogram: DCR vs. DT in his[1000], lamda vs. DT in his[1200]
-                   to get DCR_DT slope, lamda_DT slope */
-        if ((s1 = 100.5 + dcr) > 0 && s1 < 200) {
-          // try multiple correction factors for DT dependence of DCR
-          for (j=1; j<35; j++) {
-            if (s1 > 0 && s1 < 200) his[1000+chan][j*200 + (int) s1]++;
-            s1 -= drift;
-          }
-        }
-        // lamda is taken from the 1/tau value fitted with frac2 fixed
-        if ((s1 = 100.5 + lamda) > 0 && s1 < 200) {
-          // try multiple DT correction factors for preamp lamda
-          for (j=1; j<35; j++) {
-            if (s1 > 0 && s1 < 200) his[1200+chan][j*200 + (int) s1]++;
-            s1 -= 0.8 * drift;
-          }
-        }
-
-      } else if (step == 3) {
-        /* Step 3: Histogram: DCR_DT, lamda_DT in his[1600], to get peak positions for alignment */
-        if ((s1 = 500.5 + dcr) > 200 && s1 < 1100) his[1600+chan][(int) s1]++;
-        s1 -= PSA.dcr_dt_slope[chan] * drift;
-        if (s1 > 200 && s1 < 1100) his[1600+chan][1000 + (int) s1]++;
-        if (SUBTR_DCR_MEAN) s1 -= (float) dcr_mean[chan][(int) e_adc/2] / 10.0;        // correct for residual INL
-        if (s1 > 200 && s1 < 1100) his[1600+chan][2000 + (int) s1]++;
-
-        if ((s1 = 500.5 + lamda) > 200 && s1 < 1100) his[1600+chan][4000 + (int) s1]++;
-        s1 -= PSA.lamda_dt_slope[chan] * drift;
-        if (s1 > 200 && s1 < 1100) his[1600+chan][5000 + (int) s1]++;
-        if (SUBTR_DCR_MEAN) s1 -= (float) dcr_mean[chan][4000 + (int) e_adc/2] / 10.0; // correct for residual INL
-        if (s1 > 200 && s1 < 1100) his[1600+chan][6000 + (int) s1]++;
-
-      } else if (step == 4) {
-        /* Step 4: Histogram: final DCR, lamda, moved to cut value */
-        s1 = 500.5 + dcr - PSA.dcr_dt_slope[chan] * drift;
-        if (SUBTR_DCR_MEAN) s1 -= (float) dcr_mean[chan][(int) e_adc/2] / 10.0;        // correct for residual INL
-        if (s1 > 200 && s1 < 1100) his[1600+chan][3000 + (int) (s1 - PSA.dcr_lim[chan])]++;
-        s1 = 500.5 + lamda - PSA.lamda_dt_slope[chan] * drift;
-        if (SUBTR_DCR_MEAN) s1 -= (float) dcr_mean[chan][4000 + (int) e_adc/2] / 10.0; // correct for residual INL
-        if (s1 > 200 && s1 < 1100) his[1600+chan][7000 + (int) (s1 - PSA.lamda_lim[chan])]++;
       }
     }
 
@@ -661,13 +665,27 @@ int main(int argc, char **argv) {
       }
     }
 
-    /* find optimum DT correction and cut value for LQ */
+    /* find rough peak position for LQ */
     if (step == 5) {
+      for (chan = 0; chan < 200; chan++) {
+        k = 0;
+        for (j=6000; j<6600; j++) {
+          if (k < his[600+chan][j]) {
+            lq_pos[chan] = j-6200;
+            k = his[600+chan][j];
+          }
+        }
+        if (k > 0) printf("chan %d lq_pos = %.0f  k = %d\n", chan, lq_pos[chan], k);
+      }
+    }
+
+    /* find optimum DT correction and cut value for LQ */
+    if (step == 6) {
       printf("             LQ/DT \n");
       printf("Chan | slope area  FWHM    pos   cut|\n");
       for (chan = 0; chan < 200; chan++) {
         if (chan%100 >= runInfo.nGe) continue;
-        // first make sure this channel is working by counting up DCR peak
+        // first make sure this channel is working by counting up LQ peak
         s1 = 0;
         for (i=0; i<200; i++) s1 += his[1400+chan][i];
         if (s1 < 100) continue;
@@ -687,19 +705,15 @@ int main(int argc, char **argv) {
           }
         }
         if (k > 99) {
-          // float cfwhm = 1.7;  // 4 sigma
-          // float cfwhm = 2.1;  // 5 sigma
-          float cfwhm = 2.55;   // 6 sigma
+          // float cfwhm = 1.70;  // 4 sigma
+          float cfwhm = 2.12;  // 5 sigma
+          // float cfwhm = 2.55;  // 6 sigma
           s2 -= (float) (200*n);
-          if (chan%100 == 2) {
-            s1 *= 2.0;
-            s2 *= 2.0;
-            n *= 2;
-          }
           PSA.lq_dt_slope[chan] = 0.25 * n;
-          PSA.lq_lim[chan] = s2 + cfwhm*s1;
-          if (s1 > 15.0) PSA.lq_lim[chan] = s2 + cfwhm*15.0;
-          printf(" %2d %6d  %5.2f  %5.1f %5.1f| ", n, k, s1, s2, PSA.lq_lim[chan]);
+          PSA.lq_lim[chan] = s2 + cfwhm*s1 + lq_pos[chan];
+          if (s1 > 15.0) PSA.lq_lim[chan] = s2 + cfwhm*15.0 + lq_pos[chan];
+          printf(" %2d %6d  %5.2f  %5.1f %5.1f (%.1f) | ",
+                 n, k, s1, s2, PSA.lq_lim[chan] - lq_pos[chan], PSA.lq_lim[chan]);
         }
         printf("\n");
       }

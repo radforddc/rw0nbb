@@ -417,7 +417,7 @@ int main(int argc, char **argv) {
 
     /* ---------------------- process selected signals ---------------------- */
       
-    /* find t100, t80, and t95*/
+    /* find t100 and t95 */
     t100 = 700;                 // FIXME? arbitrary 700?
     for (i = t100+1; i < sig_len - 500; i++)
       if (signal[t100] < signal[i]) t100 = i;
@@ -430,12 +430,6 @@ int main(int argc, char **argv) {
     i = bl + (signal[t100] - bl)*19/20;
     for (t95 = t100-1; t95 > 500; t95--)
       if (signal[t95] <= i) break;
-
-    i = bl + (signal[t100] - bl)*4/5;
-    for (t80 = t95; t80 > 500; t80--)
-      if (signal[t80] <= i) break;
-    lq = (float) (signal[t80+1] - i) / (float) (signal[t80+1] - signal[t80]); // floating remainder for t80
-    lq *= (signal[t100] - (signal[t80+1] + i)/2);  // charge (not yet) arriving during that remainder
 
     /* do (optional) INL  correction */
     if (DO_INL) {
@@ -529,6 +523,18 @@ int main(int argc, char **argv) {
       dcr = float_trap_fixed(fsignal, t95+50, 160, 800) / 40.0;
     }
     if (runInfo.flashcam) dcr /= 2.0;  // adjust for different flashcam scaling relative to GRETINA card
+
+    /* find bl, t80, lq fro PZ-corrected signal */
+    /* get mean baseline value */
+    float fbl = 0;
+    for (i=300; i<400; i++) fbl += fsignal[i];
+    fbl /= 100.0;
+    float ff = fbl + e_raw * 0.8;
+    for (t80 = t95; t80 > 500; t80--)
+      if (fsignal[t80] <= ff) break;
+    lq = (fsignal[t80+1] - ff) / (fsignal[t80+1] - fsignal[t80]); // floating remainder for t80
+    lq *= (e_raw + fbl - (fsignal[t80+1] + ff)/2.0);  // charge (not yet) arriving during that remainder
+
     /* get late charge (lq) = delay in charge arriving after t80 */
     lq += float_trap_fixed(fsignal, t80+1, 100, 100);
     lq /= e_raw/100.0;
