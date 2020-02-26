@@ -524,7 +524,7 @@ int main(int argc, char **argv) {
     }
     if (runInfo.flashcam) dcr /= 2.0;  // adjust for different flashcam scaling relative to GRETINA card
 
-    /* find bl, t80, lq fro PZ-corrected signal */
+    /* find bl, t80, lq from PZ-corrected signal */
     /* get mean baseline value */
     float fbl = 0;
     for (i=300; i<400; i++) fbl += fsignal[i];

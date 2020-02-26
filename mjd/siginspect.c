@@ -391,7 +391,7 @@ void signalselect(FILE *f_in, MJDetInfo *Dets, MJRunInfo *runInfo) {
 
       // lost events for doLQ=0 between here
       //out_evts++;
-      /* find t100, t80, and t95*/
+      /* find t100, t95, and t80 (t80 will be redone later of -l is specified) */
       t100 = 700;                 // FIXME? arbitrary 700?
       for (i = t100+1; i < sig_len - 500; i++)
         if (signal[t100] < signal[i]) t100 = i;
@@ -403,10 +403,8 @@ void signalselect(FILE *f_in, MJDetInfo *Dets, MJRunInfo *runInfo) {
       for (t95 = t100-1; t95 > 500; t95--)
         if (signal[t95] <= i) break;
       i = bl + (signal[t100] - bl)*4/5;
-      for (t80 = t95; t80 > 500; t80--)
+      for (t80 = t100-1; t80 > 500; t80--)
         if (signal[t80] <= i) break;
-      lq = (float) (signal[t80+1] - i) / (float) (signal[t80+1] - signal[t80]); // floating remainder for t80
-      lq *= (signal[t100] - (signal[t80+1] + i)/2);  // charge (not yet) arriving during that remainder
       // and here
       //out_evts++;
 
@@ -499,9 +497,22 @@ void signalselect(FILE *f_in, MJDetInfo *Dets, MJRunInfo *runInfo) {
         dcr -= PSA.dcr_dt_slope[chan] * drift;
         if (dcr > PSA.dcr_lim[chan]) continue;         // fails DCR cut and doLQ == 1
 
+        /* find bl, t80, lq from PZ-corrected signal */
+        /* get mean baseline value */
+        float fbl = 0;
+        for (i=300; i<400; i++) fbl += fsignal[i];
+        fbl /= 100.0;
+        float ff = fbl + e_raw * 0.8;
+        for (t80 = t95; t80 > 500; t80--)
+          if (fsignal[t80] <= ff) break;
+        lq = (fsignal[t80+1] - ff) / (fsignal[t80+1] - fsignal[t80]); // floating remainder for t80
+        lq *= (e_raw + fbl - (fsignal[t80+1] + ff)/2.0);  // charge (not yet) arriving during that remainder
+
         /* get late charge (lq) = delay in charge arriving after t80 */
         lq += float_trap_fixed(fsignal, t80+1, 100, 100);
         lq /= e_raw/100.0;
+
+        lq -= PSA.lq_dt_slope[chan] * dtc;  // do DT correction to lq
         if (lq < PSA.lq_lim[chan]) continue; // passes LQ cut and doLQ == 1 selects only LQ-failing events
         if (0)
           printf("chan %3d | A/E, cut: %6.1f %6.1f | DCR, cut: %5.1f %5.1f | lq, cut: %5.1f %5.1f\n",

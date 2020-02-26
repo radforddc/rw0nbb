@@ -21,14 +21,16 @@ To analyze a data subset:
   - Check the DS*.lis files created to make sure everything makes sense.
     If you want to combine some .lis files, you can cat them together.
 
-  - Run pulser_tag_init to create a default.pdt file. It is best to do this using a background run. So if your
+2.  Run pulser_tag_init to create a default.pdt file. It is best to do this using a background run. So if your
     data subset is a calibration run, choose a background run just prior to or just following the calibration
     $ pulser_tag_init <run_file_name_xxxx>   [ where xxx is your selected bg run ]
     $ mv runxxxx.pdt default.pdt
 
-  - Once you have a DS*.lis file for your data subset, and a default.pdt, do:
+3.  Once you have a DS*.lis file for your data subset, and a default.pdt, do:
     $ presort DSyyyy.lis   [ where yyyy is the first run number of your data subset. This makes a
                              DSyyyy presorted data file, and an associated .dcl data cleaning limits file. ]
+    $ ln -s DSyyyy Data    [ creates a soft link called Data for later use ]
+
   - Before running presort, you can also create a thresholds.input file to exclude low-energy events.
     This can save a lot of disk space and processing time if youre not interested in lower energies.
     Example thresholds.input contents:
@@ -44,15 +46,22 @@ To analyze a data subset:
  1 57 3000
 #---------------------
 
-- Once you have your presorted DS* file, you have several options to proceed.
-  
-- For a calibration data subset, you want to use it to auto-tune the:
-        - pole-zero parameters                          (PZ.input)
-        - charge-trapping-correction parameters         (ctc.input)
-        - pulse-shape-analysis (A/E and DCR) parameters (psa.input)
-        - energy calibrations                           (gains.input)
+******************************************************************************************
+  Once you have your presorted DS* files, you have should next process the calibrations.
+  For a calibration data subset, you want to use it to auto-tune the:
+        - pole-zero parameters                                    (PZ.input)
+        - charge-trapping-correction parameters                   (ctc.input)
+        - pulse-shape-analysis (A/E, DCR, Lamda, LQ) parameters   (psa.input)
+        - energy calibrations                                     (gains.input)
 
 - I suggest you include a previous version of a PZ.input file and a gains.input file to give good starting values.
+
+- I also suggest that long calibrations be processed first, and the psa.input file copied to neighboring short calibrations.
+  The long calibration gives a better measure of the A/E cut value, since the short calibrations often lack sufficient
+  statistics in the DEP to get a good measure of the acceptance. Then the PSAcal skim.dat -a  command for the short calibrations
+  will preserve that A/E cut relative to the A/E peak position, wich can be determined well enough in the short runs.
+
+4. Long calibrations:
 
 - The easiest way to proceed is to use the Makefile included in test_mjd.
     Copy the Makefile to your working directory, and edit the line defining $(HOME) to point to the executables, then
@@ -66,8 +75,37 @@ To analyze a data subset:
     $ mv ctc.output ctc.input; mv gains.output gains.input
     $ PSAcal skim.dat
     $ mv psa.output psa.input
+
+- Then copy psa.input to neighboring short calibrations.
     
-- For a background data subset, copy the appropriate PZ.input, ctc.input, gains.input, and psa.input
-    from the most appropriate calibration run into the working directory. Make sure you have the .dcl file
-    created by presort there, also. Then:
+5. Short calibrations:
+- Proceed as above for the long calibrations, except for the addition of a -a flag to the PSAcal command.
+  This adjusts the position of the A/E cut relative to the A/E peak position, rather than trying to use the DEP acceptance.
+  If you want to use make, use Makefile_short instead of Makefile.
+
+    Copy the Makefile_short to your working directory, and edit the line defining $(HOME) to point to the executables, then
+    $ ln -s DSyyyy Data
+    $ make -f Makefile_short
+  - Alternatively, you can execute the commands in the Makefile by hand:
+    $ PZcal DSyyyy
+    $ mv PZ.output PZ.input
+    $ skim DSyyyy
+    $ CTcal skim.dat
+    $ mv ctc.output ctc.input; mv gains.output gains.input
+    $ PSAcal skim.dat -a
+    $ mv psa.output psa.input
+
+6. Then copy PZ.input, gains.input, ctc.input, and psa.input files from the calibration data subsets to
+   neighboring background/physics subsets.
+   Also copy your filters.input file if you used one for the calibration runs.
+    
+******************************************************************************************
+Finally, process the background/physics runs.
+
+6. Check that you have the appropriate PZ.input, ctc.input, gains.input, and psa.input
+    from the most appropriate calibration run in the working directory.
+    Make sure you have the .dcl file created by presort there, also.
+    Usually you want to keep low-energy events for these physics runs, so if there
+    is a thresholds.input file, check that its contents are compatible with what you want.
+    Then:
     $ sortrun DSyyyy

@@ -675,7 +675,7 @@ int main(int argc, char **argv) {
             k = his[600+chan][j];
           }
         }
-        if (k > 0) printf("chan %d lq_pos = %.0f  k = %d\n", chan, lq_pos[chan], k);
+        // if (k > 0) printf("chan %d lq_pos = %.0f  k = %d\n", chan, lq_pos[chan], k);
       }
     }
 
