@@ -444,9 +444,28 @@ void signalselect(FILE *f_in, MJDetInfo *Dets, MJRunInfo *runInfo) {
         }
 
         /* find A/E */
-        aovere = float_trap_max_range(fsignal, &tmax, PSA.a_e_rise[chan], 0, t0-20, t0+300);
-        aovere *= PSA.a_e_factor[chan] / e_raw;
-        if (runInfo->flashcam) aovere /= 2.0;
+        if (e_ctc > 50 && t0 > 200 && t0 < 1500) {
+          float s2 = float_trap_max_range(fsignal, &tmax, PSA.a_e_rise[chan], 0, t0-20, t0+300); // FIXME: hardwired range??
+          aovere = s2 * PSA.a_e_factor[chan] / e_raw;
+          /* do quadratic fit/interpolation over +- one sample, to improve max A/E determination
+             does this help? seems to work well in some cases, in other cases not so much?
+          */
+          if (AoE_quad_int) {
+            float s1, s3, a, b, aoe;
+            int rise = PSA.a_e_rise[chan];
+            s1 = s2 - (fsignal[tmax  ] - 2.0*fsignal[tmax   + rise] + fsignal[tmax   + 2*rise]);
+            s3 = s2 + (fsignal[tmax+1] - 2.0*fsignal[tmax+1 + rise] + fsignal[tmax+1 + 2*rise]);
+            b = s2 - (s1+s3)/2.0;
+            a = s2 - s1 + b;
+            aoe = s1 + a*a/(4.0*b);
+            if (aoe > s2) aovere = aoe * PSA.a_e_factor[chan] / e_raw;
+          }
+          if (runInfo->flashcam) aovere /= 2.0;
+        } else {
+          aovere = 0;
+          if (e_raw > 1000)
+            printf("Eror getting A/E: chan %d   e_raw, e_ctc = %.0f, %.0f  t0 = %d\n", chan, e_raw, e_ctc, t0);
+        }
         /* ---- This next section calculates the GERDA-style A/E ---- */
         if (PSA.gerda_aoe[chan]) {
           float  ssig[6][2000];

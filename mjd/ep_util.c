@@ -211,7 +211,7 @@ int ep_init(MJDetInfo *Dets, MJRunInfo *runInfo, int module_lu[NCRATES+1][21],
     for (j=0; j<16; j++) det_lu[i][j] = chan_lu[i][j] = -1;
 
   // some default values
-  for (i=0; i<runInfo->nGD; i++) {
+  for (i=0; i<runInfo->nGe; i++) {
     Dets[i].HGcalib[0] = 0.5;
     Dets[i].LGcalib[0] = 1.5;
   }
@@ -226,6 +226,8 @@ int ep_init(MJDetInfo *Dets, MJRunInfo *runInfo, int module_lu[NCRATES+1][21],
         Dets[i].LGcalib[0] = g2;
       }
     }
+  } else {
+    printf("\n file %s does not exist. runInfo->nGe = %d\n", ECAL_FILENAME, runInfo->nGe);
   }
 
   /* set up lookup table to map VME crate&slot onto VME modules */

@@ -191,7 +191,7 @@ int eventprocess(MJDetInfo *Dets, MJRunInfo *runInfo, int nChData, BdEvent *ChDa
     for (i=1; i<HIS_COUNT; i++) his2[i] = his2[i-1] + 8192;
     if (EVENTLIST) {
       f_evl = fopen("evl.txt", "w");
-      fprintf(f_evl, "#chan e_ctc    timestamp    LDA.bits.bits   detector"
+      fprintf(f_evl, "#chan e_ctc    timestamp    LDA.bits.bits   detector   "
                      " Qx      A/E     DCR  lamda    Run  t95-t0 t100-t95  A/E,DCR,lamda,lq - limit\n");
     }
 #endif
@@ -754,11 +754,27 @@ int eventprocess(MJDetInfo *Dets, MJRunInfo *runInfo, int nChData, BdEvent *ChDa
       lamda *= 8.0;                   // scaled to roughly match DCR at 2 MeV
 
       /* find A/E */
-      if (e_ctc > 50 && t0 > 600 && t0 < 1300) {
-        aovere = float_trap_max_range(fsignal, &tmax, PSA.a_e_rise[chan], 0, t0-20, t0+300);
-        aovere *= PSA.a_e_factor[chan] / e_raw;
+      if (e_ctc > 50 && t0 > 200 && t0 < 1500) {
+        float s2 = float_trap_max_range(fsignal, &tmax, PSA.a_e_rise[chan], 0, t0-20, t0+300); // FIXME: hardwired range??
+        aovere = s2 * PSA.a_e_factor[chan] / e_raw;
+        /* do quadratic fit/interpolation over +- one sample, to improve max A/E determination
+           does this help? seems to work well in some cases, in other cases not so much?
+        */
+        if (AoE_quad_int) {
+          float s1, s3, a, b, aoe;
+          int rise = PSA.a_e_rise[chan];
+          s1 = s2 - (fsignal[tmax  ] - 2.0*fsignal[tmax   + rise] + fsignal[tmax   + 2*rise]);
+          s3 = s2 + (fsignal[tmax+1] - 2.0*fsignal[tmax+1 + rise] + fsignal[tmax+1 + 2*rise]);
+          b = s2 - (s1+s3)/2.0;
+          a = s2 - s1 + b;
+          aoe = s1 + a*a/(4.0*b);
+          if (aoe > s2) aovere = aoe * PSA.a_e_factor[chan] / e_raw;
+        }
+        if (runInfo->flashcam) aovere /= 2.0;
       } else {
         aovere = 0;
+        if (e_raw > 1000)
+          printf("Eror getting A/E: chan %d   e_raw, e_ctc = %.0f, %.0f  t0 = %d\n", chan, e_raw, e_ctc, t0);
       }
 
       /* ---- This next section calculates the GERDA-style A/E ---- */
@@ -891,8 +907,10 @@ int eventprocess(MJDetInfo *Dets, MJRunInfo *runInfo, int nChData, BdEvent *ChDa
           fprintf(f_evl, "%3d %7.1f %15lld %d%d%d%d.%d%d%d%d.%d%d%d%d",
                   chan, ef, time, lq_good, lamda_good, dcr_good, a_e_good,
                   DBIT(7), DBIT(6), DBIT(5), DBIT(4), DBIT(3), DBIT(2), DBIT(1), DBIT(0));
-          fprintf(f_evl, " %s %cG Q0  %8.1f %6.1f %6.1f   %d %3d %3d  %8.2f %6.2f %6.2f %6.2f\n",
-                  Dets[chan%100].StrName, (chan > 99 ? 'L' : 'H'),
+          fprintf(f_evl, " %s %s %cG Q0  %8.1f %6.1f %6.1f   %d %3d %3d  %8.2f %6.2f %6.2f %6.2f\n",
+                  Dets[chan%100].StrName,
+                  (strstr(Dets[chan%100].DetName, "P") ? "Enr" : "Nat"),
+                  (chan > 99 ? 'L' : 'H'),
                   aovere, dcr, lamda, runInfo->runNumber, t95-t0, t100-t95,
                   aovere - PSA.ae_cut[chan], dcr - PSA.dcr_lim[chan],
                   lamda - PSA.lamda_lim[chan], lq - PSA.lq_lim[chan]);
@@ -1019,8 +1037,10 @@ int eventprocess(MJDetInfo *Dets, MJRunInfo *runInfo, int nChData, BdEvent *ChDa
           fprintf(f_evl, "%3d %7.1f %15lld %d%d%d%d.%d%d%d%d.%d%d%d%d",
                   chan, ef, time, lq_good, lamda_good, dcr_good, a_e_good,
                   DBIT(7), DBIT(6), DBIT(5), DBIT(4), DBIT(3), DBIT(2), DBIT(1), DBIT(0));
-          fprintf(f_evl, " %s %cG Q%x  %8.1f %6.1f %6.1f   %d %3d %3d  %8.2f %6.2f %6.2f %6.2f\n",
-                  Dets[chan%100].StrName, (chan > 99 ? 'L' : 'H'),
+          fprintf(f_evl, " %s %s %cG Q%x  %8.1f %6.1f %6.1f   %d %3d %3d  %8.2f %6.2f %6.2f %6.2f\n",
+                  Dets[chan%100].StrName,
+                  (strstr(Dets[chan%100].DetName, "P") ? "Enr" : "Nat"),
+                  (chan > 99 ? 'L' : 'H'),
                   a_e_good + 2*dcr_good + 4*lamda_good + 8*lq_good,
                   aovere, dcr, lamda, runInfo->runNumber, t95-t0, t100-t95,
                   aovere - PSA.ae_cut[chan], dcr - PSA.dcr_lim[chan],

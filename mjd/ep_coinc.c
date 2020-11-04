@@ -347,12 +347,49 @@ int eventprocess(MJDetInfo *Dets, MJRunInfo *runInfo, int nChData, BdEvent *ChDa
       } else if (!pulser) {          // CLEAN signals
 
         /* find A/E */
-        if (PSA.ae_cut[chan] > 100 && e_ctc > 50 && t0 > 600 && t0 < 1300) {
-          aovere = float_trap_max_range(fsignal, &tmax, 4, 0, t0-5, t0+230);
-          aovere *= 1100.0 / e_adc;
+        if (e_ctc > 50 && t0 > 200 && t0 < 1500) {
+          float s2 = float_trap_max_range(fsignal, &tmax, PSA.a_e_rise[chan], 0, t0-20, t0+300); // FIXME: hardwired range??
+          aovere = s2 * PSA.a_e_factor[chan] / e_raw;
+          /* do quadratic fit/interpolation over +- one sample, to improve max A/E determination
+             does this help? seems to work well in some cases, in other cases not so much?
+          */
+          if (AoE_quad_int) {
+            float s1, s3, a, b, aoe;
+            int rise = PSA.a_e_rise[chan];
+            s1 = s2 - (fsignal[tmax  ] - 2.0*fsignal[tmax   + rise] + fsignal[tmax   + 2*rise]);
+            s3 = s2 + (fsignal[tmax+1] - 2.0*fsignal[tmax+1 + rise] + fsignal[tmax+1 + 2*rise]);
+            b = s2 - (s1+s3)/2.0;
+            a = s2 - s1 + b;
+            aoe = s1 + a*a/(4.0*b);
+            if (aoe > s2) aovere = aoe * PSA.a_e_factor[chan] / e_raw;
+          }
+          if (runInfo->flashcam) aovere /= 2.0;
         } else {
           aovere = 0;
+          if (e_raw > 1000)
+            printf("Eror getting A/E: chan %d   e_raw, e_ctc = %.0f, %.0f  t0 = %d\n", chan, e_raw, e_ctc, t0);
         }
+
+        /* ---- This next section calculates the GERDA-style A/E ---- */
+        if (PSA.gerda_aoe[chan]) {
+          float  ssig[6][2000];
+          for (k=100; k<2000; k++) ssig[0][k] = fsignal[k] - fsignal[300];
+          for (j=1; j<6; j++) {  // number of cycles
+            for (i=200; i < 1500; i++) {
+              ssig[j][i] = 0.0;
+              for (k=0; k<10; k++) {
+                ssig[j][i] += ssig[j-1][i+k-5];
+              }
+              ssig[j][i] /= 10.0;
+            }
+          }
+          aovere = 0;
+          for (k=250; k<1450; k++) {
+            if (aovere < ssig[5][k] - ssig[5][k-1]) aovere = ssig[5][k] - ssig[5][k-1];
+          }
+          aovere *= 12.71*1593/e_raw;
+        }
+        /* ---- end of GERDA-style A/E ---- */
 
         /* get DCR from slope of PZ-corrected signal tail */
         dcr = float_trap_fixed(fsignal, t95+50, 100, 500) / 25.0;

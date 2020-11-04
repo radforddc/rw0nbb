@@ -29,8 +29,10 @@
 
 // default trap filter parameters for trapmax energy determination
 //         for e_ctc, can be over-ridden by values in filters.input
-#define TRAP_RISE 601   // default trapezoid filter integration time (samples)
-#define TRAP_FLAT 280   // default trapezoid filter flat-top time (samples)
+//#define TRAP_RISE 601   // default trapezoid filter integration time (samples)
+//#define TRAP_FLAT 280   // default trapezoid filter flat-top time (samples)
+#define TRAP_RISE 501   // default trapezoid filter integration time (samples)
+#define TRAP_FLAT 250   // default trapezoid filter flat-top time (samples)
 
 // default triangular filter parameters for A/E determination
 //         can be over-ridden by values in filters.input
@@ -38,9 +40,11 @@
 // #define A_E_RISE   8     #define A_E_FACTOR 275.0
 // #define A_E_RISE  10     #define A_E_FACTOR 210.0 
 // #define A_E_RISE  12     #define A_E_FACTOR 160.0
-#define A_E_RISE    8       // rise=fall ; flat = 0
+#define A_E_RISE       8    // rise=fall ; flat = 0
 #define A_E_FACTOR 275.0    // multiplication factor for initial scaling of A/E
-#define GERDA_AoE   0       // set to 1 to use GERDA-style A/E instead
+#define GERDA_AoE      0    // set to 1 to use GERDA-style A/E instead
+#define AoE_quad_int   1    // set to 1 to do a quadratic time interpolation of A
+                            //    instead of simply taking the max A value
 
 // default asymmetric trap filter parameters for t0 determination
 //         can be over-ridden by values in filters.input

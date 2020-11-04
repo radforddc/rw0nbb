@@ -326,10 +326,10 @@ int main(int argc, char **argv) {
         if (step == 2) {
           /* try 20 options to find optimum drift-time correction for A/E_ctc */
           aovere_norm = aovere * 800.0/a_e_pos[chan];
-          s1 = aovere_norm - 600.0 - 1.0 * dtc;
+          s1 = aovere_norm - 600.0;
           for (k=0; k < 20; k++) {
             if ((j = s1 + 0.5) > 0 && j < 400) his[200+chan][j + 400*k]++;
-            s1 += 0.5 * dtc;
+            s1 += 1.0 * dtc;
           }
         } else if (step == 3) {
           /* try 20 different slopes of A/E_ctc_e against energy to see which one is best
@@ -357,13 +357,13 @@ int main(int argc, char **argv) {
 
         // make file for 2D plots  of A/E|E|CTC
         if (f_out_2d && chan == CHAN_2D && e_ctc >= roi_elo)// && e_ctc <= roi_elo+700)
-          fprintf(f_out_2d, "%4d %9.3f %8.2f %8.2f %7.2f %7.2f %7.2f %7.2fn",
+          fprintf(f_out_2d, "%4d %9.3f %8.2f %8.2f %7.2f %7.2f %7.2f %7.2f\n",
                   chan, e_ctc, aovere_norm, aovere * 800.0/a_e_pos[chan], drift, dtc,
                   dcr, lamda/1.3);
       }
 
       /* find and test A/E cut */
-      if (step == 4) {
+      if (step == 4 && aovere2 > 20) {
         // put narrow gate on DE peak, and wider gate on bgnd
         if ((j = aovere2 * 800.0/PSA.ae_pos[chan] + 0.5) < 1500 && j > 0) {
           if (e_ctc >= DEP_E - 2.5 && e_ctc < DEP_E + 2.5) {            // DEP; 5.0 keV
@@ -396,7 +396,7 @@ int main(int argc, char **argv) {
         if (s2 >= PSA.ae_cut[chan]) ae_good = 1;
       }
 
-      if (step == 5 ) {
+      if (step == 5 && s2 > 20) {
         // count events in narrow gate on DEP and SEP, and wider gates on bgnd
         if (e_ctc >= DEP_E - 2.5 && e_ctc < DEP_E + 2.5) {            // DEP; 5.0 keV
           his[800+chan][1]++;
@@ -533,7 +533,7 @@ int main(int argc, char **argv) {
           if (step == 2) {
             /* found slope of A/E with drift time that optimizes resolution */
             a_e_pos1[chan]        = a_e_pos[chan] * (j%400 + 600) / 800.0;
-            PSA.ae_dt_slope[chan] = a_e_pos[chan] * (j/400 - 2) / 800.0 * 0.5;
+            PSA.ae_dt_slope[chan] = a_e_pos[chan] * (j/400) / 800.0 * 1.0;
             printf("%3d %6.1f %4.0f (%4d)\n",
                    chan, PSA.ae_dt_slope[chan], a_e_pos1[chan], j/400);
           } else if (step == 3) {
@@ -635,13 +635,15 @@ int main(int argc, char **argv) {
 
         /* find best choice (minimum fwhm) for DTC to DCR value */
         for (int dcr_or_lamda = 0; dcr_or_lamda < 2; dcr_or_lamda++) {
-          j = k = n = 0;
+          j = n = 0;
           s1 = 999;
+          //k = 500; // minimum area = 400, or 80% of best peak area
           for (j=1; j<35; j++) {
-            fwhm = 8;
+            fwhm = 10;   // CHECKME!
             if (dcr_or_lamda < 1 && chan > 99) fwhm = 3;
             if ((pos = autopeak3(his[1000 + 200*dcr_or_lamda + chan], 200*j, 200+200*j, &area, &fwhm)) &&
-                area > 100 && fwhm < s1) {
+                //area > k*0.8 && fwhm < s1) { // FIXME???
+                area > 1000 && fwhm < s1) { // FIXME???
               s1 = fwhm;
               s2 = pos;
               k = area;
@@ -695,9 +697,9 @@ int main(int argc, char **argv) {
         j = k = n = 0;
         s1 = 999;
         for (j=0; j<40; j++) {
-          fwhm = 8;
+          fwhm = 16;   // CHECKME!
           if ((pos = autopeak4(his[1400 + chan], 200*j, 200+200*j, 0.8, &area, &fwhm)) &&
-              area > 100 && fwhm < s1) {
+              area > 50 && fwhm < s1) {
             s1 = fwhm;
             s2 = pos;
             k = area;
@@ -830,7 +832,7 @@ int main(int argc, char **argv) {
     } else if (i < 1600) {
       sprintf(spname, "%d; ch %d LQ DT-corrected with test factors", i, i%200);
     } else if (i < 1800) {
-      sprintf(spname, "%d; DCR and lamda, unshifted and shifted to ut", i);
+      sprintf(spname, "%d; DCR and lamda, unshifted and shifted to cut", i);
     } else if (i < 2000) {
       sprintf(spname, "%d; ch %d averaged DCR and lamda vs energy", i, i%200);
     } else if (i < 2200) {

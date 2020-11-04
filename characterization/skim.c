@@ -477,12 +477,29 @@ int main(int argc, char **argv) {
     if (elo == 3000 && (E_THRESH > 0 && e_ctc < E_THRESH)) continue;
 
     /* find A/E */
-    if (e_ctc > 50 && t0 > 600 && t0 < 1300) {
-      aovere = float_trap_max_range(fsignal, &tmax, PSA.a_e_rise[chan], 0, t0-20, t0+300);
-      aovere *= PSA.a_e_factor[chan] / e_raw;
+    if (e_ctc > 50 && t0 > 200 && t0 < 1500) {
+      float s2 = float_trap_max_range(fsignal, &tmax, PSA.a_e_rise[chan], 0, t0-20, t0+300); // FIXME: hardwired range??
+      aovere = s2 * PSA.a_e_factor[chan] / e_raw;
+      /* do quadratic fit/interpolation over +- one sample, to improve max A/E determination
+         does this help? seems to work well in some cases, in other cases not so much?
+      */
+      if (AoE_quad_int) {
+        float s1, s3, a, b, aoe;
+        int rise = PSA.a_e_rise[chan];
+        s1 = s2 - (fsignal[tmax  ] - 2.0*fsignal[tmax   + rise] + fsignal[tmax   + 2*rise]);
+        s3 = s2 + (fsignal[tmax+1] - 2.0*fsignal[tmax+1 + rise] + fsignal[tmax+1 + 2*rise]);
+        b = s2 - (s1+s3)/2.0;
+        a = s2 - s1 + b;
+        aoe = s1 + a*a/(4.0*b);
+        //printf("b_over_s2 a e_raw:   %f %5.0f %5.0f   s1, s2, s3, aoe: %6.0f %6.0f %6.0f %6.0f   tmax, -t0: %d %d\n",
+        //       b/s2, a, e_raw, s1, s2, s3, aoe-s2, tmax, tmax - t0);
+        if (aoe > s2) aovere = aoe * PSA.a_e_factor[chan] / e_raw;
+      }
       if (runInfo.flashcam) aovere /= 2.0;
     } else {
       aovere = 0;
+      if (e_raw > 1000)
+        printf("Eror getting A/E: chan %d   e_raw, e_ctc = %.0f, %.0f  t0 = %d\n", chan, e_raw, e_ctc, t0);
     }
 
     /* ---- This next section calculates the GERDA-style A/E ---- */
@@ -538,6 +555,17 @@ int main(int argc, char **argv) {
     /* get late charge (lq) = delay in charge arriving after t80 */
     lq += float_trap_fixed(fsignal, t80+1, 100, 100);
     lq /= e_raw/100.0;
+
+    /* for his, lq (late charge) starts at ch 1000, drift is centered at ch 5000
+     * his[0]: lq, drift
+     * his[1]: e_raw
+     * his[2]: e_raw for lq > 20
+     * his[3]: e_raw for lq > 20 and drift > 0
+     * his[4]: drift for lq > 20
+     * his[5]: lq, drift for A/E > 1390 (SSE)
+     * his[6]: e_raw for A/E > 1390 (SSE)
+     * his[7]: e_raw for lq > 20 and A/E > 1390 (SSE)
+     */
 
     if (e_raw > 10 && e_raw < 8000) {
       if (lq < 300)  his[0][1000 + (int) lq]++;

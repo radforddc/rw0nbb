@@ -66,7 +66,7 @@ int main(int argc, char **argv) {
   for (i=1; i<HIS_COUNT; i++) his[i] = his[i-1]+8192;
 
   // see if channel and energy limits are defined in the command line
-  chi=100+runInfo.nGe-1;
+  // chi=100+runInfo.nGe-1;   // runInfo.nGe not yet set!
   if (runInfo.argc > 2) clo = atoi(runInfo.argv[2]);
   if (runInfo.argc > 3) chi = atoi(runInfo.argv[3]);
   if (runInfo.argc > 4) elo = atoi(runInfo.argv[4]);
@@ -96,7 +96,8 @@ int main(int argc, char **argv) {
     printf("ERROR in CTcal.c; cannot malloc SavedData!\n");
     exit(-1);
   }
-  printf("Skim data mode = %d\n", sd_version);
+  printf("Skim data mode = %d;  %d detectors, %d skimmed events\n",
+         sd_version, runInfo.nGe, nsd);
   if (sd_version == 1) {
     for (i=1; i<nsd; i++) sd1[i] = sd1[i-1] + 1;
     fread(*sd1, sizeof(**sd1), nsd, f_in);
@@ -215,6 +216,8 @@ int main(int argc, char **argv) {
         if (e_ctc > 2500 && e_ctc < 2750) his[2000+chan][(int) (4.0*(e_ctc-1307.25) + 0.5)]++;
       }
       // make file for 2D plots  of E vs CTC
+      // roi_elo = DEP_E - 40.0;
+      // if (f_out_2d && step == 4 && chan == CHAN_2D && e_ctc >= roi_elo && e_ctc <= roi_elo+80)
       roi_elo = CAL_E - 40.0;
       if (f_out_2d && step == 4 && chan == CHAN_2D && e_ctc >= roi_elo && e_ctc <= roi_elo+700)
         fprintf(f_out_2d, "%4d %9.3f %8.3f  %8.3f %6.3f %10.3f %6.3f %10.2f\n",
