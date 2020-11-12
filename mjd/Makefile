@@ -106,7 +106,7 @@ coinc: $(mk_source_files) $(mk_header_files) ep_coinc.c pz_fitter.c
 	$(CC) $(CFLAGS) -o $@ $(mk_source_files) ep_coinc.c pz_fitter.c -lm
 
 interpolateCal:  $(mk_header_files) interpolateCal.c ep_util.c
-	$(CC) $(CFLAGS) -o $@ interpolateCal.c ep_util.c
+	$(CC) $(CFLAGS) -o $@ interpolateCal.c ep_util.c -lm
 
 
 FORCE:
