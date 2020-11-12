@@ -50,12 +50,12 @@ int main(int argc, char **argv) {
   SavedData2 **sd2;
   int      sd_version = 1;
   int      chan;
-  float    aovere, aovere_norm, drift, dcr, lamda, lq, s1, s2, s3;
+  float    aovere, aovere_norm, drift, dcr, lamda, lq=0, s1, s2, s3;
   double   e_raw;
   int      nsd = 0, isd = 0;  // number of saved data, and pointer to saved data id
 
   double e_adc, e_ctc, e_lamda, e_fin, gain;
-  int    i, j, ie, t80, t95, t100;
+  int    i, j, ie, t95, t100;
   int    *his[HIS_COUNT];
   int    *dcr_mean[200], mean_dcr_ready = 0;
   FILE   *f_out, *f_out_2d = 0, *fp;
@@ -194,7 +194,6 @@ int main(int argc, char **argv) {
       dcr    = sd2[isd]->dcr;
       lamda  = sd2[isd]->lamda;
       lq     = sd2[isd]->lq;
-      t80    = sd2[isd]->t80;
       t95    = sd2[isd]->t95;
       t100   = sd2[isd]->t100;
     }

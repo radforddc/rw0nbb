@@ -70,7 +70,7 @@ int get_file_name(char *fn, int fn_length, int run, FILE *dir) {
   int   foundit = 0, i;
   char  line[256];
 
-  sprintf(fn, "Run%d", run);
+  sprintf(fn, "%d", run);
   rewind(dir);
   while (!foundit && fgets(line, sizeof(line), dir)) {
     if (strstr(line, fn)) foundit = 1;

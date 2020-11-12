@@ -105,7 +105,7 @@ typedef struct{
   int   amplitude, attenuated, finalAttenuated;
   float baselineVoltage;                          // first-stage preamp baseline at zero bias
   int   PTcrate, PTslot, PTchan;                  // pulser-tag crate, clot, ch
-  double HGcalib[10], LGcalib[10];                // energy calibration coefficients
+  double HGcalib[5], HGcalib_unc[5], LGcalib[5], LGcalib_unc[5];   // energy calibration coefficients and uncertainties
 } MJDetInfo;
 
 /* define data structure to hold all required information about run itself;

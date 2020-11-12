@@ -11,9 +11,9 @@ mk_header_files = MJDSort.h runBits.h
 all_programs = pulser_tag_init presort PZcal skim skim_opt CTcal PSAcal sortskim \
                sortrun rundiff rundiff2 siginspect threshold threshold2 \
                sumrms run_check prebuild inlcheck \
-               compress decompress  compress_fcio decompress_fcio deadtime enr_rms
+               compress decompress  compress_fcio decompress_fcio deadtime enr_rms merge_skim interpolateCal
 
-extras = noise coinc 
+extras = noise coinc
 
 
 All: $(all_programs)
@@ -25,6 +25,9 @@ PZcal: $(mk_header_files) PZcal.c decode_runfile_header.c ep_util.c pz_fitter.c
 
 skim:  $(mk_header_files) skim.c decode_runfile_header.c ep_util.c pz_fitter.c
 	$(CC) $(CFLAGS) -o $@ skim.c decode_runfile_header.c ep_util.c pz_fitter.c -lm
+
+merge_skim:  $(mk_header_files) merge_skim.c
+	$(CC) $(CFLAGS) -o $@ merge_skim.c
 
 skim_opt:   $(mk_header_files) skim.c decode_runfile_header.c ep_util.c pz_fitter.c
 	$(CC) $(CFLAGS) -DOPT -o $@ skim.c decode_runfile_header.c ep_util.c pz_fitter.c -lm
@@ -101,6 +104,9 @@ enr_rms: enr_rms.c
 
 coinc: $(mk_source_files) $(mk_header_files) ep_coinc.c pz_fitter.c
 	$(CC) $(CFLAGS) -o $@ $(mk_source_files) ep_coinc.c pz_fitter.c -lm
+
+interpolateCal:  $(mk_header_files) interpolateCal.c ep_util.c
+	$(CC) $(CFLAGS) -o $@ interpolateCal.c ep_util.c
 
 
 FORCE:
