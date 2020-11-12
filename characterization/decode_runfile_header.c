@@ -352,7 +352,9 @@ int decode_runfile_header(FILE *f_in, MJDetInfo *DetsReturn, MJRunInfo *runInfo)
       fgets(line, sizeof(line), f_in);
 
       while (!strstr(line, "</string>")) {
-        if (!strstr(line, "--,--,--")) {  // empty data, so no detector present; skip this line
+	//        if (!strstr(line, "--,--,--")) {  // empty data, so no detector present; skip this line
+        if (!strstr(line, "--,--,--") &&
+	    !strstr(line, ",,,,,,,,,,,")) {  // RLV Mostly empty data, so no detector present; skip this line
           if (nMJDets >= NMJDETS) {
             printf("ERROR: Too many detectors (>%d) found in ORCA MJD model!\n\n", NMJDETS);
             return -1;
@@ -533,7 +535,13 @@ int decode_runfile_header(FILE *f_in, MJDetInfo *DetsReturn, MJRunInfo *runInfo)
       }
       fgets(line, sizeof(line), f_in);
 
-      if (discard(f_in, 2, line, "<key>ConnectedTo</key>")) return -1;
+      //This code is fixed to deal with an occasional missing "ConnectedTo" key is good data
+      //The solution is not to return if missing.
+      //if (discard(f_in, 2, line, "<key>ConnectedTo</key>")) return -1;
+      if (strstr(line, "<key>ConnectedTo</key>")) {
+        fgets(line, sizeof(line), f_in);
+        fgets(line, sizeof(line), f_in);
+	}
       CHECK_FOR_STRING("<key>adcEnabledMask</key>");
       if (read_int(f_in, &GeCC[nGeCC].adcEnabledMask, line)) return -1;
       CHECK_FOR_STRING("<key>amplitudes</key>");
@@ -880,6 +888,11 @@ int decode_runfile_header(FILE *f_in, MJDetInfo *DetsReturn, MJRunInfo *runInfo)
       k++;
     }
   }
+  /* from DS7 onward, the detector table can have holes in it.  The sorting just done
+     will remove the holes, because the empty entries have no name and no bias 
+     entries.  Test replacing nMJDet by k. 
+  */
+  nMJDets = k;  //fixup empty entries in the raw detector table
 
   /*  --------------- give details of 4M digizer settings ------------------ */
   if (VERB_DIG) {
@@ -1083,14 +1096,33 @@ int decode_runfile_header(FILE *f_in, MJDetInfo *DetsReturn, MJRunInfo *runInfo)
   for (j=0; j<nGeCC; j++) {
     GeCC[j].GeSlot[0] = GeCC[j].GeSlot[1] = -1;
   }
+
+  //Set the GeSlots, checking for errors first
   for (j=0; j<nGeCC; j++) {
+
     for (k=0; k<16; k++) {
+
       for (i=0; i<nMJDets; i++) {
-        if (strstr(GeCC[j].detectorNames[k], MJMDets[i].DetName)) {
+	
+	if (strstr(GeCC[j].detectorNames[k], MJMDets[i].DetName)) {
           if (GeCC[j].crate != MJMDets[i].crate) {
-            printf("\nERROR: CC %d crate %d != Detector %d crate %d!\n\n",
-                   j, GeCC[j].crate, i,MJMDets[i].crate);
-            return -1;
+	    //Check for crate==0, which implies that the ADC was removed from the Acq list
+	    //Disable these channels which should not be in the data stream
+	    if (GeCC[j].crate == 0) {
+	      for (int kkk=0; kkk< nGeDig; kkk++) {
+		if ((GeDig[kkk].crate == MJMDets[i].crate) &&
+		    (GeDig[kkk].slot == MJMDets[i].slot)) {
+		  GeDig[kkk].ChEnabled[MJMDets[i].chanHi]=0;
+		  if (VERBOSE)
+		    printf("NOTICE: Disable detector %s in crate %d slot %d because card removed from ACQ\n",
+			   MJMDets[i].DetName, MJMDets[i].crate, MJMDets[i].slot);
+		}
+	      }
+	    } else {
+	      printf("\nERROR: CC %d crate %d != Detector %d crate %d!\n\n",
+		     j, GeCC[j].crate, i,MJMDets[i].crate);
+	      return -1;
+	    }
           }
           if (GeCC[j].GeSlot[0] < 0) {
             GeCC[j].GeSlot[0] = MJMDets[i].slot;

@@ -630,8 +630,7 @@ int main(int argc, char **argv) {
   } else {
     fwrite(&runInfo, sizeof(runInfo) - 8*sizeof(int), 1, f_out);
   }
-  // fwrite(*sd, sizeof(**sd), nsd, f_out);
-  // writing large files all in one go doesn't seem to work?
+
   for (isd = 0; isd < nsd; isd += sdchunk) {
     if (nsd - isd < sdchunk) {
       fwrite(sd[isd], sizeof(**sd), nsd - isd, f_out);

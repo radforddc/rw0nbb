@@ -56,8 +56,8 @@ int main(int argc, char **argv) {
   PZinfo  PZI;
 
   // data used, stored, and reused in the different steps
-  SavedData  **sd1;
-  SavedData2 **sd2;
+  SavedData  **sd1 = NULL;
+  SavedData2 **sd2 = NULL;
   int      sd_version = 1;
   int      chan;
   float    aovere, drift, lq;
@@ -68,7 +68,7 @@ int main(int argc, char **argv) {
   float    dcr, lamda;
 
   double e_ctc, e_adc, gain;
-  float  pos, area, fwhm, s1, s2, s3, s4, s5, ppos[200][6] = {{0}};
+  float  pos, area, fwhm, s1, s2, s3, s4, s5;
   int    i, j, k, kk, n, roi_elo, ae_good;
   int    *his[HIS_COUNT];
   int    *dcr_mean[200], mean_dcr_ready = 0;
@@ -380,9 +380,9 @@ int main(int argc, char **argv) {
         }
       }
 
+      ae_good = 0;
       if (step >= 5) {  // check A/E cut (ae_good = 0 or 1)
         if (a_e_pos[chan] <= 100) continue;    // CHECKME; all steps > 4 deal with A/E and LQ cuts
-        ae_good = 0;
         s2 = aovere2;
         // adjust for energy dependence of cut
         // first correct for series noise: assume 2*sigma cut
@@ -635,8 +635,9 @@ int main(int argc, char **argv) {
 
         /* find best choice (minimum fwhm) for DTC to DCR value */
         for (int dcr_or_lamda = 0; dcr_or_lamda < 2; dcr_or_lamda++) {
-          j = n = 0;
+          j = n = k = 0;
           s1 = 999;
+          s2 = 0;
           //k = 500; // minimum area = 400, or 80% of best peak area
           for (j=1; j<35; j++) {
             fwhm = 10;   // CHECKME!
@@ -731,7 +732,6 @@ int main(int argc, char **argv) {
           area = 0;
           if (chan > 99) fwhm = 3;
           pos = autopeak3(his[1600 + chan], 400+1000*j, 700+1000*j, &area, &fwhm) - 500.0 - 1000.0*j;
-          if (area > 200) ppos[chan][j] = pos;
         }
         if (area < 200) continue;
         // set cut limit to 1.3 FWHM above centroid
@@ -742,7 +742,6 @@ int main(int argc, char **argv) {
           fwhm = 8;
           area = 0;
           pos = autopeak3(his[1600 + chan], 1400+1000*j, 1700+1000*j, &area, &fwhm) - 1500.0 - 1000.0*j;
-          if (area > 200) ppos[chan][j] = pos;
         }
         if (area < 200) continue;
         fwhm = 8;
@@ -751,8 +750,6 @@ int main(int argc, char **argv) {
         // set cut limit to 1.3 FWHM above centroid
         PSA.lamda_lim[chan] = 1.3 * fwhm + pos;
         printf(" %5.1f %7.0f %6.2f %8.1f  |\n", pos, area, fwhm, PSA.lamda_lim[chan]);
-        // printf("   ppos: %7.3f %7.3f %7.3f   %7.3f %7.3f %7.3f\n",
-        //        ppos[chan][0], ppos[chan][1], ppos[chan][2], ppos[chan][3], ppos[chan][4], ppos[chan][5]);
       }
     }
 
