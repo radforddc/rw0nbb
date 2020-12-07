@@ -803,21 +803,28 @@ int get_sig_t0(float *fsignal, int len, int chan, PSAinfo *PSA){
              corrected for rise and flat times of trapezoid
   */
 
-  int    j, t0;
-  float  ttrap[2048];
+  int    j, t0, t1, tmax;
+  float  ttrap[len], ttmax = 0;          // FIXME: variable len here could slow down code? use max_len?
   double s2, s3;
+  int    dt = PSA->t0_rise[chan] + T0_TRAP_FLAT + T0_TRAP_FALL;
 
-  if (len > 2000) len = 2000;
-  int dt = PSA->t0_rise[chan] + T0_TRAP_FLAT + T0_TRAP_FALL;
+  t1 = 20 + PSA->e_ctc_rise[chan] - dt;      // start of range for calculation of asymmetric trap
+  if (t1 < 20) t1= 20;
+  len -=  PSA->e_ctc_rise[chan] + dt + 10;   // end of range for calculation of asymmetric trap
+  //if (len > max_len) len = maxlen;         // FIXME
 
   // calculate time-pick-off asymmetric trapezoid
   s2 = s3 = 0;
-  t0 = 20;
+  t0 = tmax = t1;
   ttrap[t0-1] = 0;
   for (j=0; j<PSA->t0_rise[chan]; j++) s2 += fsignal[t0 + j + T0_TRAP_FLAT + T0_TRAP_FALL];
   for (j=0; j<T0_TRAP_FALL; j++) s3 += fsignal[t0 + j];
-  for (; t0 < len - dt; t0++) {
+  for (; t0 < len; t0++) {
     ttrap[t0] = s2 / (double) PSA->t0_rise[chan] - s3 / (double) T0_TRAP_FALL;
+    if (ttmax < ttrap[t0]) {
+      ttmax = ttrap[t0];
+      tmax = t0;
+    }
     if (ttrap[t0] > 100) break;
     s2 += fsignal[t0 + PSA->t0_rise[chan] + T0_TRAP_FLAT + T0_TRAP_FALL] -
           fsignal[t0 + T0_TRAP_FLAT + T0_TRAP_FALL];
@@ -825,8 +832,15 @@ int get_sig_t0(float *fsignal, int len, int chan, PSAinfo *PSA){
   }
 
   // find threshold time
-  for (; ttrap[t0-1] > PSA->t0_thresh[chan]; t0--) ;
-  if (t0 < 21) return -1;
+  if (DEBUG && ttmax < 100)
+    printf("< t1, t0, ttmax, tmax: %d %d %.1f %d  ttrap[t1] : %.1f ", t1, t0, ttmax, tmax, ttrap[t1]);
+  if (ttmax > PSA->t0_thresh[chan]) {
+    for (t0 = tmax; t0 > t1 && ttrap[t0-1] > PSA->t0_thresh[chan]; t0--) ;
+  } else {
+    t0 = tmax;
+  }
+  if (DEBUG && ttmax < 100) printf(" << final t0: %d\n", t0); fflush(stdout);
+  if (t0 <= t1) return -1;
   return t0 + dt;
 } /* get_sig_t0() */
 
@@ -856,14 +870,17 @@ double get_CTC_energy(float *fsignal, int len, int chan, MJDetInfo *Dets, PSAinf
 
   /* find t0 */
   *t0 = get_sig_t0(fsignal, len, chan, PSA);
-  if (*t0 < 210) return -1.0f;
+  /* check t0 lower limit to make sure we have enough signal baseline to calculate the fixed trap */
+  if (*t0 < PSA->e_ctc_rise[chan] - 31) return -1.0f;
+  /* check t0 upper limit to make sure we have enough remaining signal to calculate the fixed trap */
+  if (*t0 + PSA->e_ctc_rise[chan] + PSA->e_ctc_flat[chan - 10] >= len) return -1.0f;
 
-  // Get new energy estimation based on *fixed* trap
+  /* get new energy estimation based on *fixed* trap */
   *e_raw = float_trap_fixed(fsignal, *t0 - PSA->e_ctc_rise[chan] - 10,
                             PSA->e_ctc_rise[chan], PSA->e_ctc_flat[chan]) / (double) PSA->e_ctc_rise[chan];
 
   /* find time-related value for trapping correction */
-  s = float_trap_fixed(fsignal, *t0-210, 200, 10)/200.0;  // FIXME?? increase 200 to TRAP_RISE?
+  s = float_trap_fixed(fsignal, *t0-210, 200, 10)/200.0;  // FIXME?? increase 200 to TRAP_RISE or TRAP_FLAT?
   *drift = (0.7 * *e_raw - s) / 1000.0;   // drift time * charge for use in charge-trapping correction,
                                           // with some offset to get average near zero
 
@@ -876,8 +893,7 @@ double get_CTC_energy(float *fsignal, int len, int chan, MJDetInfo *Dets, PSAinf
   }
 
   if (DEBUG)
-    printf("e_raw, e_adc, t0, s1, s2, drift:"
-           " %6.1f %6.1f %6d %6.0f %6.2f  E_ctc = %.0f\n",
+    printf("e_raw, e_adc, t0, s1, s2, drift: %6.1f %6.1f %6d %6.0f %6.2f  E_ctc = %.0f\n",
            *e_raw, *e_adc, *t0, s, *drift, e_ctc);
 
   return e_ctc;

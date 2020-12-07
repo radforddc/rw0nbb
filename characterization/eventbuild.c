@@ -154,6 +154,15 @@ int flush_buffers(MJDetInfo *Dets, MJRunInfo *runInfo, BdEvent *modBuf[NBDS], in
        0 otherwise (good event, can be clean or dirty)
     */
     (*built_evts)++;
+
+#ifdef EXCLUDE_GRAN
+    /* exclude granularity events even without processing them to save time and disk space */
+    if (checkGranularity(Dets, runInfo, nChData, ChData)) {
+      (*badevts)++;
+      continue;
+    }
+#endif
+
     //printf("ep_in\n"); fflush(stdout);
     if ((k = eventprocess(Dets, runInfo, nChData, ChData)) < 0) return k;
     //printf("ep_out\n"); fflush(stdout);
@@ -1184,7 +1193,16 @@ int eventbuild(FILE *f_in, MJDetInfo *Dets, MJRunInfo *runInfo) {
              0 otherwise (good event, can be clean or dirty)
       */
       built_evts++;
-      if ((k = eventprocess(Dets, runInfo, nChData, ChData)) < 0) return k;
+
+#ifdef EXCLUDE_GRAN
+    /* exclude granularity events even without processing them to save time and disk space */
+    if (checkGranularity(Dets, runInfo, nChData, ChData)) {
+      badevts++;
+      continue;
+    }
+#endif
+
+     if ((k = eventprocess(Dets, runInfo, nChData, ChData)) < 0) return k;
 #ifdef PRESORT
       if (k < 1) {  // good event, not a pulser, but before data cleaning; i.e. can be dirty
         for (i = 0; i < nChData; i++) {
