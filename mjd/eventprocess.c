@@ -147,6 +147,19 @@ int eventprocess(MJDetInfo *Dets, MJRunInfo *runInfo, int nChData, BdEvent *ChDa
     }
 
     doPT = pulser_tag_init(Dets, runInfo, &ptInfo);
+#ifdef REQUIRE_PULSER
+    if (!doPT) {
+      printf("ERROR: Required pulser tag info not available!\n\n");
+      char line[256];
+      sprintf(line, "pulser_tag_init %s", runInfo->filename);
+      system(line);
+      doPT = pulser_tag_init(Dets, runInfo, &ptInfo);
+      if (!doPT) {
+        printf("ERROR: Required pulser tag info STILL not available!\n\n");
+        exit(-1);
+      }
+    }
+#endif
 #ifndef QUIET
     doDC = data_clean_init(runInfo, &dcInfo);
 #endif
@@ -285,6 +298,14 @@ int eventprocess(MJDetInfo *Dets, MJRunInfo *runInfo, int nChData, BdEvent *ChDa
   /* some versions of the event builder allow for a special call
      to trigger end-of-run cleanup */
   if (runInfo->analysisPass < 0) {
+#ifdef REQUIRE_PULSER  // check for updated pulser tag info when a new input file is read
+    if (runInfo->analysisPass == -17) {// special flag just for pulser_stab.c
+      PTag pttest;
+      if (pulser_tag_info_read(runInfo, &pttest)) return 0;  // test for existence of a new file
+      return pulser_tag_init(Dets, runInfo, &ptInfo);
+    }
+#endif
+
     if (SUM_UP_PULSER_CNTS) {     // set to 1 for summation of pulser counts over many data subsets
       FILE *f_out2;
       printf("Reading ptagtot.dat\n"); fflush(stdout);
@@ -773,8 +794,8 @@ int eventprocess(MJDetInfo *Dets, MJRunInfo *runInfo, int nChData, BdEvent *ChDa
         if (runInfo->flashcam) aovere /= 2.0;
       } else {
         aovere = 0;
-        if (e_raw > 1000)
-          printf("Eror getting A/E: chan %d   e_raw, e_ctc = %.0f, %.0f  t0 = %d\n", chan, e_raw, e_ctc, t0);
+        if (e_raw > 1000 && (e_ctc > 1 || VERBOSE) )
+          printf("Error getting A/E: chan %d   e_raw, e_ctc = %.0f, %.0f  t0 = %d\n", chan, e_raw, e_ctc, t0);
       }
 
       /* ---- This next section calculates the GERDA-style A/E ---- */

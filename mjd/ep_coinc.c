@@ -39,7 +39,7 @@
 
 int eventprocess(MJDetInfo *Dets, MJRunInfo *runInfo, int nChData, BdEvent *ChData[]) {
 
-  int     i, j, bad[NCHS], pulser = 0, tmax, wsig_len;
+  int     i, j, k, bad[NCHS], pulser = 0, tmax, wsig_len;
   int     ievt, idet, ch, crate, slot, chan, evlen, siglen, board_type;
   int     dirty_sig = 0, granularity;  // data cleaning result
   long long int  time;
@@ -316,15 +316,14 @@ int eventprocess(MJDetInfo *Dets, MJRunInfo *runInfo, int nChData, BdEvent *ChDa
 
       /* ------- do DT correction ------- */
       emax = float_trap_max(fsignal, &tmax, 401, 250)/401.0;
-      e_ctc = get_CTC_energy(fsignal, siglen, chan, emax,
-                             Dets, &t0, &e_adc, &e_raw, &drift, CTC.e_dt_slope[chan]);
+      e_ctc = get_CTC_energy(fsignal, siglen, chan, Dets, &PSA,
+                             &t0, &e_adc, &e_raw, &drift, CTC.e_dt_slope[chan]);
       if (t0 < 0) {
         if (VERBOSE) printf("t0 determination failed; chan %3d, timestamp %lld\n", chan, time);
         if (VERBOSE) printf("chan, t0, tmax: %d %d %d; e: %.2f\n",
                             chan, t0, tmax+TRAP_RISE+TRAP_FLAT, e_raw);
         continue;
-      }
-      if (e_ctc < 0.001) {
+      } else if (e_ctc < 0.001) {
         printf("E_ctc = %.1f < 1 eV!\n", e_ctc);
         if (VERBOSE) printf("chan, t0, tmax: %d %d %d; e, drift: %.2f %.2f\n",
                             chan, t0, tmax+TRAP_RISE+TRAP_FLAT, e_raw, drift);
@@ -528,8 +527,8 @@ int eventprocess(MJDetInfo *Dets, MJRunInfo *runInfo, int nChData, BdEvent *ChDa
           printf(" >>> PZ_correct return error for chan %d\n", chan);
       }
       emax = float_trap_max(fsignal, &tmax, 401, 250)/401.0;
-      e_ctc = get_CTC_energy(fsignal, siglen, chan, emax,
-                             Dets, &t0, &e_adc, &e_raw, &drift, CTC.e_dt_slope[chan]);
+      e_ctc = get_CTC_energy(fsignal, siglen, chan, Dets, &PSA,
+                             &t0, &e_adc, &e_raw, &drift, CTC.e_dt_slope[chan]);
       dirty_sig = data_clean(signal, chan, &dcInfo);
       fprintf(f_evl, "%3d %7.1f %15lld %d%d%d.%d%d%d%d.%d%d%d%d",
               chan, e_ctc, time, lamda_good, dcr_good, a_e_good,

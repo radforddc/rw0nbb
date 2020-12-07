@@ -11,9 +11,10 @@ mk_header_files = MJDSort.h runBits.h
 all_programs = pulser_tag_init presort PZcal skim skim_opt CTcal PSAcal sortskim \
                sortrun rundiff rundiff2 siginspect threshold threshold2 \
                sumrms run_check prebuild inlcheck \
-               compress decompress  compress_fcio decompress_fcio deadtime enr_rms merge_skim interpolateCal
+               compress decompress  compress_fcio decompress_fcio deadtime \
+               merge_skim interpolateCal check_veto_only
 
-extras = noise coinc
+extras = noise coinc pulser_stab get_run_nums get_run_times
 
 
 All: $(all_programs)
@@ -107,6 +108,19 @@ coinc: $(mk_source_files) $(mk_header_files) ep_coinc.c pz_fitter.c
 
 interpolateCal:  $(mk_header_files) interpolateCal.c ep_util.c
 	$(CC) $(CFLAGS) -o $@ interpolateCal.c ep_util.c -lm
+
+check_veto_only:  check_veto_only.c
+	$(CC) $(CFLAGS) -o $@ check_veto_only.c
+
+pulser_stab: $(mk_source_files) $(mk_header_files) pulser_stab.c eventprocess.c ep_finalize.c
+	$(CC) $(CFLAGS) -D QUIET -D REQUIRE_PULSER -o $@ pulser_stab.c decode_runfile_header.c eventprocess.c ep_util.c ep_finalize.c -lm
+
+get_run_nums: $(mk_source_files) $(mk_header_files) get_run_nums_times.c
+	$(CC) $(CFLAGS) -D QUIET -D GET_NUMS -o $@ get_run_nums_times.c decode_runfile_header.c -lm
+
+get_run_times: $(mk_source_files) $(mk_header_files) get_run_nums_times.c
+	$(CC) $(CFLAGS) -D QUIET -o $@ get_run_nums_times.c decode_runfile_header.c -lm
+
 
 
 FORCE:

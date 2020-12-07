@@ -2,7 +2,7 @@ To compile:
 
 edit MJDsort.h
 Change the line '#define PATH_TO_NONLIN_DATA   "/Users/fy2/code2/nonlin_data"'
-      tp point the PATH... to the location of the nonlin_data on your system
+      to point the PATH... to the location of the nonlin_data on your system
 make
 
 Add the location of these codes  (...rw0nb/mjd) to your path.
@@ -10,6 +10,24 @@ Add the location of these codes  (...rw0nb/mjd) to your path.
 
 
 To analyze a data subset:
+=========================
+
+0. Suggested directory structure example:
+
+   ds6a
+     |---- cal              (to hold all calibration data subsets and analysis)
+     |      |--- ds25834L  (one calibration data subset)
+     |      |--- ds28113
+     |      |--- ds30059
+     |      |--- ds32161, etc
+     |---- bb              (to hold all background/physics data subsets and analysis)
+            |--- ds26648  (one background data subset)
+            |--- ds28345
+            |--- ds29991, etc
+
+     Note the uppercase L at the end of ds25834L. Add that uppercase L to each long calibration subdirectory
+     to identify it as a long calibration in the later analysis.
+
 
 1. Make a .lis file containing the names of the run files to be included in the subset
   - In the directory with the run files, do
@@ -21,7 +39,7 @@ To analyze a data subset:
   - Check the DS*.lis files created to make sure everything makes sense.
     If you want to combine some .lis files, you can cat them together.
 
-2.  Run pulser_tag_init to create a default.pdt file. It is best to do this using a background run. So if your
+2.  Run pulser_tag_init to create a default.pdt file. It is important to do this using a background run. So if your
     data subset is a calibration run, choose a background run just prior to or just following the calibration
     $ pulser_tag_init <run_file_name_xxxx>   [ where xxx is your selected bg run ]
     $ mv runxxxx.pdt default.pdt
@@ -46,27 +64,37 @@ To analyze a data subset:
  1 57 3000
 #---------------------
 
-******************************************************************************************
-  Once you have your presorted DS* files, you have should next process the calibrations.
+-----------------------------------------------------------------------------------------
+
+Once you have your presorted DS* files, you have should next process the calibrations.
   For a calibration data subset, you want to use it to auto-tune the:
         - pole-zero parameters                                    (PZ.input)
         - charge-trapping-correction parameters                   (ctc.input)
         - pulse-shape-analysis (A/E, DCR, Lamda, LQ) parameters   (psa.input)
         - energy calibrations                                     (gains.input)
 
-- I suggest you include a previous version of a PZ.input file and a gains.input file to give good starting values.
+- I suggest you include a previous version of a PZ.input file and a gains.input file to give good starting values, but
+  this is not strictly necessary.
 
-- I also suggest that long calibrations be processed first, and the psa.input file copied to neighboring short calibrations.
+- Long calibrations be processed first, and the psa.input file copied to neighboring short calibrations.
   The long calibration gives a better measure of the A/E cut value, since the short calibrations often lack sufficient
   statistics in the DEP to get a good measure of the acceptance. Then the PSAcal skim.dat -a  command for the short calibrations
   will preserve that A/E cut relative to the A/E peak position, wich can be determined well enough in the short runs.
 
-4. Long calibrations:
+********************************************************************************************
+  *** I have a code make_cal_script1.c that will generate a shell script to do all this automatically.
+  *** make_cal_script1 should be run inside the cal/ directory, above all of the dsyyyyy sub directories.
+  *** Copy Makefile_longcal and Makefile_shortcal to the cal/ directory.
+  *** Then you should just be able to run script1.sh from the cal/ directory.
+  *** Then you can skip steps 4 and 5 below.
+  ******************************************************************************************
 
-- The easiest way to proceed is to use the Makefile included in test_mjd.
-    Copy the Makefile to your working directory, and edit the line defining $(HOME) to point to the executables, then
+4. Long calibrations: (if not using make_cal_script1 and script1.sh)
+
+- The easiest way to proceed is to use the Makefile_longcal included in test_mjd.
+    Copy the Makefile_longcal to your working directory, and edit the line defining $(HOME) to point to the executables, then
     $ ln -s DSyyyy Data
-    $ make
+    $ make -f Makefile_longcal
   - Alternatively, you can execute the commands in the Makefile by hand:
     $ PZcal DSyyyy
     $ mv PZ.output PZ.input
@@ -78,14 +106,15 @@ To analyze a data subset:
 
 - Then copy psa.input to neighboring short calibrations.
     
-5. Short calibrations:
+5. Short calibrations: (if not using make_cal_script1 and script1.sh)
+
 - Proceed as above for the long calibrations, except for the addition of a -a flag to the PSAcal command.
   This adjusts the position of the A/E cut relative to the A/E peak position, rather than trying to use the DEP acceptance.
-  If you want to use make, use Makefile_short instead of Makefile.
+  If you want to use make, use Makefile_shortcal instead of Makefile_longcal.
 
-    Copy the Makefile_short to your working directory, and edit the line defining $(HOME) to point to the executables, then
+    Copy Makefile_shortcal to your working directory, and edit the line defining $(HOME) to point to the executables, then
     $ ln -s DSyyyy Data
-    $ make -f Makefile_short
+    $ make -f Makefile_shortcal
   - Alternatively, you can execute the commands in the Makefile by hand:
     $ PZcal DSyyyy
     $ mv PZ.output PZ.input
@@ -95,14 +124,42 @@ To analyze a data subset:
     $ PSAcal skim.dat -a
     $ mv psa.output psa.input
 
-6. Then copy PZ.input, gains.input, ctc.input, and psa.input files from the calibration data subsets to
-   neighboring background/physics subsets.
-   Also copy your filters.input file if you used one for the calibration runs.
-    
-******************************************************************************************
-Finally, process the background/physics runs.
+-----------------------------------------------------------------------------------------
+Alternative newer procedure:
 
-6. Check that you have the appropriate PZ.input, ctc.input, gains.input, and psa.input
+After PSAcal has been run on all calibrations, and psa.input files are available, then
+- cd to dsxx/cal directory
+
+> merge_skim ds*/skim.dat
+> PSAcal  merged_skim.dat    << generates psa.output for the common/merged skim file from all calibs
+
+copy  psa.output to all ds* subdirectories, as psa.input,
+then re-run PSAcal -a on all calib skim.dat files
+
+
+-----------------------------------------------------------------------------------------
+
+6. Somewhat optional: Run interpolateCal to interpolate the PSA parameters and PSA cuts between consecutive cablrations, and
+   also identify any enriched detectors that should probably be treaded as veto-only during the intervening background runs.
+   It generates PZ.interp, ctc.interp, gains.interp, and psa.interp files to use as *.inout files in the background runs.
+   It also generates a file called veto_only_runs.txt.
+
+7. Then copy PZ.input, gains.input, ctc.input, and psa.input files (or copy and rename the equivalent .interp files) from the
+   calibration data subsets to neighboring background/physics subsets.
+   Also copy your filters.input file if you used one for the calibration runs.
+
+********************************************************************************************
+  *** Again, I have a code make_bb_script1.c that will generate a shell script to do all this automatically.
+  *** This code should be run AFTER interpolateCal, so that it will copy/rename the *.interp files instead of the *.input files.
+  *** Run the code in the directory ABOVE the cal/ and bb/ directories
+  *** Copy Makefile_bb to the bb/ directory.
+  *** Then you should just be able to run script1.sh from the bb/ directory.
+  *** Then you can skip step 8 below.
+  ******************************************************************************************
+    
+Finally, process the background/physics runs. (if not using make_bb_script1 and script1.sh)
+
+8. Check that you have the appropriate PZ.input, ctc.input, gains.input, and psa.input
     from the most appropriate calibration run in the working directory.
     Make sure you have the .dcl file created by presort there, also.
     Usually you want to keep low-energy events for these physics runs, so if there

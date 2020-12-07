@@ -11,14 +11,16 @@ int main(int argc, char **argv) {
 
   MJDetInfo  Dets[NMJDETS];
   MJRunInfo  runInfo;
-  int        argn=1;
-  FILE       *f_in, *f_out;
+  int        argn=1, adjust_aoe_pos = 0, nsd_start = 0;
+  float      aoe_pos1[200] = {1000}, aoe_pos[200]={1000}, a, b, pos;
+  char       *c, psa_fname[256], line[256];
+  FILE       *f_in, *f_in2, *f_out;
 
   SavedData2 **sd;
   int     nsd = 0;  // number of data to be read from one file
   int     sdchunk = 1000000; // number of SavedData events to malloc at one time
   int     numsd = 0, maxsd = sdchunk;  // number of saved data, and pointer to saved data id
-  int     i, sd_version = 1;
+  int     i, j, sd_version = 1;
 
 
 
@@ -37,6 +39,26 @@ int main(int argc, char **argv) {
 
   /* open skim data file as input */
   while (argn < argc && (f_in = fopen(argv[argn], "r"))) {
+
+    if (argn == 1 || adjust_aoe_pos) {
+      strncpy(psa_fname, argv[argn], sizeof(psa_fname)-5);
+      if ((c = strstr(psa_fname, "skim.dat"))) {
+        strncpy(c, "psa.input", 12);              // replace skim.dat with psa.input
+        if ((f_in2 = fopen(psa_fname, "r"))) {
+          /* read a/e positions from psa.input */
+          while (fgets(line, 256, f_in2)) {
+            if (line[0] == '#') continue;  // # header line
+            if (sscanf(line, "%d %f %f %f", &i, &a, &b, &pos) < 4) continue;
+            if (i >= 0 && i < 200) aoe_pos[i] = pos;
+          }
+          fclose(f_in2);
+          adjust_aoe_pos = 1;
+          printf("A/E positions read from %s\n", psa_fname);
+          if (argn == 1)
+            for (i=0; i<200; i++) aoe_pos1[i] = aoe_pos[i];
+        }
+      }
+    }
     printf("Reading skim file %s\n", argv[argn]);
 
     // read saved skim data from f_in
@@ -59,7 +81,7 @@ int main(int argc, char **argv) {
       exit(-1);
     } else {   // sd_version == 2
       while (numsd + nsd >= maxsd) {
-        //printf("1  nsd: %d  numsd: %d    maxsd: %d\n", nsd, numsd, maxsd); fflush(stdout);
+        //printf("0  nsd: %d  numsd: %d    maxsd: %d\n", nsd, numsd, maxsd); fflush(stdout);
         fread(sd[numsd], sizeof(**sd), maxsd - numsd, f_in);
         nsd -= maxsd - numsd;
         numsd = maxsd;
@@ -69,7 +91,7 @@ int main(int argc, char **argv) {
           exit(-1);
         }
         maxsd += sdchunk;
-        //printf("1c  nsd: %d  numsd: %d    maxsd: %d\n", nsd, numsd, maxsd); fflush(stdout);
+        //printf("1  nsd: %d  numsd: %d    maxsd: %d\n", nsd, numsd, maxsd); fflush(stdout);
         for (i=numsd+1; i<maxsd; i++) sd[i] = sd[i-1]+1;
       }
       //printf("2  nsd: %d  numsd: %d    maxsd: %d\n", nsd, numsd, maxsd); fflush(stdout);
@@ -81,7 +103,15 @@ int main(int argc, char **argv) {
            "  Total events now %d\n",
            runInfo.runNumber, runInfo.filename, numsd);
 
+    if (argn > 1 && adjust_aoe_pos) {
+      printf("Adjusting A/E values by differences in positions\n");
+      for (i = nsd_start; i < numsd; i++) {
+        if ((j = sd[i]->chan) >= 0 && j < 200) sd[i]->a_over_e += aoe_pos1[j] - aoe_pos[j];
+      }
+    }
+
     argn++;
+    nsd_start = numsd;
     fclose(f_in);
   }
   // save skim data (SavedData) to disk

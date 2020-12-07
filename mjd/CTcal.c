@@ -37,7 +37,7 @@ int main(int argc, char **argv) {
 
 /* ---------------------------------------------------- */
 
-  int clo=0, chi=199, elo=1, ehi=16000;
+  int clo=0, chi=-1, elo=1, ehi=16000;
   CTCinfo CTC;
 
   // skim data
@@ -66,13 +66,12 @@ int main(int argc, char **argv) {
   for (i=1; i<HIS_COUNT; i++) his[i] = his[i-1]+8192;
 
   // see if channel and energy limits are defined in the command line
-  // chi=100+runInfo.nGe-1;   // runInfo.nGe not yet set!
+  // chi=100+runInfo.nGe-1;   // runInfo.nGe not yet set! See later.
   if (runInfo.argc > 2) clo = atoi(runInfo.argv[2]);
   if (runInfo.argc > 3) chi = atoi(runInfo.argv[3]);
   if (runInfo.argc > 4) elo = atoi(runInfo.argv[4]);
   if (runInfo.argc > 5) ehi = atoi(runInfo.argv[5]);
   if (clo < 0) clo = 0;
-  if (chi > 100+runInfo.nGe) chi = 100+runInfo.nGe;
 
   // read saved skim data from f_in
   fread(&nsd, sizeof(int), 1, f_in);
@@ -113,6 +112,7 @@ int main(int argc, char **argv) {
     printf("\n Warning: No initial charge-trapping correction data read. Does ctc.input exist?\n");
   }
 
+  if (chi == -1) chi=100+runInfo.nGe-1;   // runInfo.nGe is now set!
   printf("\nChs %d to %d, e_trapmax %d to %d\n\n", clo, chi, elo, ehi);
 
   if (MAKE_2D &&
@@ -213,7 +213,7 @@ int main(int argc, char **argv) {
           his[1400+chan][(int) (2.0*e_ctc + 0.5)]++;
         }
         // test for effect of 0.5-keV binning on FWHM:
-        if (e_ctc > 2500 && e_ctc < 2750) his[2000+chan][(int) (4.0*(e_ctc-1307.25) + 0.5)]++;
+        if (e_ctc > 1310 && e_ctc < 2750) his[2000+chan][(int) (4.0*(e_ctc-1307.25) + 0.5)]++;
       }
       // make file for 2D plots  of E vs CTC
       // roi_elo = DEP_E - 40.0;

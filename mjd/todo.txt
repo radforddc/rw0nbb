@@ -1,10 +1,7 @@
-decode_runfile_header??
-
-make step size AND OFFSET in CTC for energy variable, depending on last value in input file?
 
 Experiment with PZ fitter time range
 
-Gate on t100-t90?
-
 for E_lamda, subtract total mean value of lamda before applying correction?
 (like is done in PSAcal, between sp 1601 and 1401)
+
+Library-PSA for detector IDs 30, 50 (have poor A/E selectivity)

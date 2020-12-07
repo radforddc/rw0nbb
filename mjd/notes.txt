@@ -2,6 +2,14 @@ UPDATED nores,txt, starting from August 2019 when codes were reqritten
 
 TODO:
 
+Experiment with PZ fitter time range
+
+For E_lamda, subtract total mean value of lamda before applying correction?
+(like is done in PSAcal, between sp 1601 and 1401)
+
+Library-PSA for detector IDs 30, 50 (have poor A/E selectivity)
+
+
 [ ADD Gretina4A support to: compress*, decompress*, run_check, siginspect, prebuild ]
 [ anl_firmware: crate 2 slot 6 -> detectors 29, 30, 34, [37], 44  (37 disabled) ]
 
