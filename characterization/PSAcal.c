@@ -14,6 +14,7 @@
                         ((chan < 100 && SUBTRACT_MEAN_DCR_HG) || \
                          (chan > 99  && SUBTRACT_MEAN_DCR_LG)))
 
+
 /*  ------------------------------------------------------------ */
 
 int main(int argc, char **argv) {
@@ -327,19 +328,31 @@ int main(int argc, char **argv) {
           /* try 20 options to find optimum drift-time correction for A/E_ctc */
           aovere_norm = aovere * 800.0/a_e_pos[chan];
           s1 = aovere_norm - 600.0;
-          for (k=0; k < 20; k++) {
+          if (keep_ae_cut) {
+            k = PSA.ae_dt_slope[chan] * 800.0/a_e_pos[chan] + 0.5;
+            s1 += k * dtc;
             if ((j = s1 + 0.5) > 0 && j < 400) his[200+chan][j + 400*k]++;
-            s1 += 1.0 * dtc;
+          } else {
+            for (k=0; k < 20; k++) {
+              if ((j = s1 + 0.5) > 0 && j < 400) his[200+chan][j + 400*k]++;
+              s1 += dtc;
+            }
           }
         } else if (step == 3) {
           /* try 20 different slopes of A/E_ctc_e against energy to see which one is best
              each step adds a slope of 2 A/E per MeV
           */
           aovere_norm = aovere1 * 800.0/a_e_pos1[chan];
-          s1 = aovere_norm - 600.0 - 2.0*1.4 * ec;
-          for (k=0; k < 20; k++) {
+          s1 = aovere_norm - 600.0 - 2.0 * ec;
+          if (keep_ae_cut) {
+            k = PSA.ae_e_slope[chan] * 800.0/a_e_pos1[chan] + 2.5;
+            s1 += k * ec;
             if ((j = s1 + 0.5) > 0 && j < 400) his[400+chan][j + 400*k]++;
-            s1 += 2.0*0.7 * ec;
+          } else {
+            for (k=0; k < 20; k++) {
+              if ((j = s1 + 0.5) > 0 && j < 400) his[400+chan][j + 400*k]++;
+              s1 += ec;
+            }
           }
         }
       }
@@ -518,14 +531,22 @@ int main(int argc, char **argv) {
       }
       for (chan = 0; chan < 200; chan++) {
         if (chan%100 >= runInfo.nGe) continue;
-        j = 3;
+        int w = 7, lo=0, hi = 8000;                       // default test peak search width & range
+        if (strstr(Dets[chan%100].DetName, "P42664B")) {  // special case for ID 30 = C2P1D2
+          w  = 50;           // this is a veto-only detector, and has a much broader A/E distribution
+          if (step == 2) {   // limiting the search range limits the value of PSA.ae_dt_slope
+            lo = 2800;
+            hi = 3200;
+          }
+        }
+        j = lo + (w+1)/2;
         k = kk = 0;
         // look for test peak with the most counts over a 7-bin interval
-        for (i=0; i<7; i++) k += his[sp_offset+chan][i];
-        for (i=4; i<8000; i++) {
-          k += his[sp_offset+chan][i+3] - his[sp_offset+chan][i-4];
+        for (i=lo; i<lo+w; i++) k += his[sp_offset+chan][i];
+        for (i=lo; i<hi; i++) {
+          k += his[sp_offset+chan][i+w] - his[sp_offset+chan][i];
           if (kk < k) {
-            j = i;
+            j = i + (w+1)/2;
             kk = k;
           }
         }
@@ -533,13 +554,13 @@ int main(int argc, char **argv) {
           if (step == 2) {
             /* found slope of A/E with drift time that optimizes resolution */
             a_e_pos1[chan]        = a_e_pos[chan] * (j%400 + 600) / 800.0;
-            PSA.ae_dt_slope[chan] = a_e_pos[chan] * (j/400) / 800.0 * 1.0;
+            PSA.ae_dt_slope[chan] = a_e_pos[chan] * (j/400) / 800.0;
             printf("%3d %6.1f %4.0f (%4d)\n",
                    chan, PSA.ae_dt_slope[chan], a_e_pos1[chan], j/400);
           } else if (step == 3) {
             /* found slope of A/E with energy that optimizes resolution */
             PSA.ae_pos[chan]     = a_e_pos1[chan] * (j%400 + 600) / 800.0;
-            PSA.ae_e_slope[chan] = a_e_pos1[chan] * (j/400 - 2) / 800.0 * 0.7;
+            PSA.ae_e_slope[chan] = a_e_pos1[chan] * (j/400 - 2) / 800.0;  // FIXED: sloe here was too small by a factor of 2
             printf("%3d %6.1f %4.0f (%4d)\n",
                    chan, PSA.ae_e_slope[chan], PSA.ae_pos[chan], j/400);
           }
@@ -699,7 +720,7 @@ int main(int argc, char **argv) {
         s1 = 999;
         for (j=0; j<40; j++) {
           fwhm = 16;   // CHECKME!
-          if ((pos = autopeak4(his[1400 + chan], 200*j, 200+200*j, 0.8, &area, &fwhm)) &&
+          if ((pos = autopeak4(his[1400 + chan], 200*j, 200+200*j, 1.0, &area, &fwhm)) &&
               area > 50 && fwhm < s1) {
             s1 = fwhm;
             s2 = pos;
@@ -762,7 +783,6 @@ int main(int argc, char **argv) {
       double s0, e0, e1, e2, e3, e4, e5;
       for (chan = 0; chan < 100; chan++) {  // HG channels ony!
         if (chan%100 >= runInfo.nGe) continue;
-        if (chan%100 == 30 || chan%100 == 50) continue;  // FIXME!  - dets with bad A/E
         s1 = (double) his[800+chan][1] - (double) his[800+chan][3]/8.0;  // DEP - bknd, all
         s2 = (double) his[800+chan][2] - (double) his[800+chan][4]/8.0;  // DEP - bknd, cut
         s3 = (double) his[800+chan][5] - (double) his[800+chan][7]/8.0;  // SEP - bknd, all
@@ -790,6 +810,7 @@ int main(int argc, char **argv) {
                chan, s4/s3, e3, s2/s1, e0, s5, e5);
         fprintf(fp, "%4d %6.2f %5.2f %6.2f %5.2f %6.2f %5.2f\n",
                 chan, s4/s3*100.0, e3*100.0, s2/s1*100.0, e0*100.0, s5*100.0, e5*100.0);
+        if (chan%100 == 30 || chan%100 == 50) continue;  // do not include dets with bad A/E in mean value
         s6 += s4/s3;
         s7 += s2/s1;
         s8 += s5;
