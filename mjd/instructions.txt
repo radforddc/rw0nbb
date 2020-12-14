@@ -134,7 +134,9 @@ After PSAcal has been run on all calibrations, and psa.input files are available
 > PSAcal  merged_skim.dat    << generates psa.output for the common/merged skim file from all calibs
 
 copy  psa.output to all ds* subdirectories, as psa.input,
-then re-run PSAcal -a on all calib skim.dat files
+then re-run PSAcal -a on all calib skim.dat files.
+
+make_cal_script2 ; script2.sh does all tgis automatically
 
 
 -----------------------------------------------------------------------------------------
@@ -166,3 +168,13 @@ Finally, process the background/physics runs. (if not using make_bb_script1 and 
     is a thresholds.input file, check that its contents are compatible with what you want.
     Then:
     $ sortrun DSyyyy
+
+
+
+post-analysis: from bb subdirectory, run:
+
+cp -a ../../DetectorMasses.csv .
+get_exposure ds*/DS[0-9]                       -> makes exposure.txt
+ln -s ../cal/veto_only_runs.txt
+cat ds*/evl.txt > evl.txt
+check_veto_only veto_only_runs.txt evl.txt     -> makes evl_cvo.txt

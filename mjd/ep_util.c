@@ -1037,6 +1037,43 @@ float autopeak(int *his, int e, float *area_ret, float *fwhm_ret) {
   return cent;
 } /* autopeak */
 
+float autopeak1(int *his, int lo, int hi, float *area, float *fwhm) {
+
+  float cent = 0.0f, fwhm0;
+  int   i, j, max=0, w2, lo1, hi1;
+
+  *area = 0;
+  fwhm0 = *fwhm; // first rough guess
+  // first find mode for use as a first guess for the position
+  for (j=lo; j<hi; j++) {
+    if (his[j] > max) {
+      max = his[j];
+      i  = j;
+    }
+  }
+  if (max < 4) {
+    printf("AutoPeak: Sorry, that peak is too weak! max = %d\n", max);
+    return 0.0f;
+  }
+  w2 = lrint(fwhm0 * 2.0);
+  lo1 = i - w2;
+  hi1 = i + w2;
+  if (lo1 < lo) lo1 = lo;
+  if (hi1 > hi) hi1 = hi;
+  find_cent(his, lo1, hi1, area, &cent, fwhm);
+
+  if (VERBOSE) {
+    printf("autopk1: %d; %d to %d, h = %d\n", i, lo1, hi1, max);
+    printf("  >> pos, area, fwhm = %.1f, %.0f, %.2f\n", cent, *area, *fwhm);
+  }
+
+  if (*area < 10) {
+    if (VERBOSE) printf("AutoPeak: Sorry, could not identify the peak!\n");
+    return 0.0f;
+  }
+  return cent;
+} /* autopeak1 */
+
 
 float autopeak2(int *his, int lo, int hi, float *area_ret, float *fwhm_ret) {
 
@@ -1494,27 +1531,32 @@ int data_clean(short *signal, int chan, DataClean *dcInfo) {
 float autopeak3a(int *his, int lo, int hi, float *area_ret, float *fwhm_ret) {
 
   double area=0, cent=0, fwhm=0, factor = 2.6;
-  int    i, j, w=*fwhm_ret, imax=lo, amax=0;
+  int    i, j, w, imax=lo, amax=0;
 
-  for (i=hi; i>=lo-factor*w; i--) {
+
+  w = *fwhm_ret * factor + 0.5;  // integrate over +- 1.3 * fwhm ~ 3 sigma
+  if (w > hi - lo) w = hi-lo;    //   or from lo to hi
+
+  /* first find the w-bin-wide region within lo-hi with max # of counts */
+  for (i = lo; i <= hi-w; i++) {
     area = 0;
-    for (j=i; j<i+factor*w; j++) area += his[j];
+    for (j=i; j<i+w; j++) area += his[j];
     if (area > 50 && area >= amax) {
       imax = i;
       amax = area;
     }
     if (amax && area < amax/2) break;
-  }
+   }
   if (!amax) return 0.0;
-  //printf(">>> imax, amax, w = %d %d %d\n", imax, amax, w);
 
+  /* then integrate to get area, centroid, and FWHM = 2.355*RMS */
   area = 0;
-  for (j=imax; j<imax+factor*w; j++) {
+  for (j=imax; j<imax+w; j++) {
     area += his[j];
     cent += his[j] * j;
   }
   cent /= area;
-  for (j=imax; j<imax+factor*w; j++)
+  for (j=imax; j<imax+w; j++)
     fwhm += his[j] * (((double) j) - cent) * (((double) j) - cent);
   fwhm = sqrt(fwhm/area) * 2.355;
 
@@ -1528,6 +1570,7 @@ float autopeak3(int *his, int lo, int hi, float *area, float *fwhm) {
   double pos = 0, fwhm0=0;
   int    j, max = 0, lo_save=lo, hi_save=hi;
 
+  //printf("ap3: lo, hi, fwhm: %d %d %.0f", lo, hi, *fwhm);
   // first find maximum over search range and use that to restrict range a little
   for (j=lo; j<hi; j++) {
     if (his[j] > max) {
@@ -1539,6 +1582,7 @@ float autopeak3(int *his, int lo, int hi, float *area, float *fwhm) {
   hi = pos + 4 * *fwhm;
   if (lo < lo_save) lo = lo_save;
   if (hi > hi_save) hi = hi_save;
+  //printf(" >>  lo, hi: %d %d\n", lo, hi);
 
   // now do search using iterative integration
   for (j=0; j<10; j++) {
@@ -1825,8 +1869,9 @@ int PSA_info_read(MJRunInfo *runInfo, PSAinfo *PSA) {
 
   int    i, n, ret_value=0;
   char   line[256];
-  float  a, b, c, d, e, f, g, h, s, q;
+  float  a, b, c, d, e, f, g, h, s, q, t;
   int    j, k, l, m, o, lo, hi;
+  unsigned int t0 = 0;
   FILE   *f_in;
 
   /*
@@ -1843,6 +1888,8 @@ int PSA_info_read(MJRunInfo *runInfo, PSAinfo *PSA) {
     PSA->lamda_lim[i]      = 0;
     PSA->lq_dt_slope[i]    = 0;
     PSA->lq_lim[i]         = -1;
+    PSA->ae_t0[i]          = 0;
+    PSA->ae_t_slope[i]     = 0;
   }
 
   if ((f_in = fopen("psa.input", "r"))) {
@@ -1850,10 +1897,10 @@ int PSA_info_read(MJRunInfo *runInfo, PSAinfo *PSA) {
     printf("\n Initializing PSA values from file psa.input\n\n");
     while (fgets(line, sizeof(line), f_in)) {
       if (line[0] == '#' || strlen(line) < 4) continue;
-      e = 0; f = 1; s = 0; q = -1;
+      e = 0; f = 1; s = 0; q = -1; t0=0;
       if ((n=sscanf(line,
-                    "%d %f %f %f %f %f %f %f %f %f %f",
-                    &i,&a,&b,&c,&d,&e,&f,&g,&h,&s,&q)) < 9 ||
+                    "%d %f %f %f %f %f %f %f %f %f %f %u %e",
+                    &i,&a,&b,&c,&d,&e,&f,&g,&h,&s,&q, &t0,&t)) < 9 ||
           i < 0 || i > 199) {
         printf(" ERROR; reading of psa.input file failed! line: %s\n", line);
         fclose(f_in);
@@ -1869,6 +1916,10 @@ int PSA_info_read(MJRunInfo *runInfo, PSAinfo *PSA) {
       PSA->lamda_lim[i]      = h;
       PSA->lq_dt_slope[i]    = s;
       PSA->lq_lim[i]         = q;
+      if (n > 12 && t0 > 0) {
+        PSA->ae_t0[i]        = t0;
+        PSA->ae_t_slope[i]   = t;
+      }
     }
     fclose(f_in);
 
@@ -1969,10 +2020,16 @@ int PSA_info_write(MJRunInfo *runInfo, PSAinfo *PSA) {
               "#Chan  ae_dt_slope ae_e_slope  ae_pos  ae_cut  dcr_dt_slope dcr_lim  lamda_dt_slope lamda_lim  lq_dt_slope lq_lim\n");
       //           1         7.50      10.70 1007.50 1005.60          0.42    1.00            0.42      1.00         3.25    123.0
       //       %5dxx  %11.2fxxxxx %10.2fxxxx %7.2fxx %7.2fxx  %12.2fxxxxxx %7.2fxx  %14.2fxxxxxxxx %9.2fxxxx %12.2fxxxxxxx %6.1fxx
-    if (i%100 < runInfo->nGe)
-      fprintf(f_out, "%5d  %11.2f %10.2f %7.2f %7.2f  %12.2f %7.2f  %14.2f %9.2f %12.2f %6.1f\n",
+    if (i%100 < runInfo->nGe) {
+      fprintf(f_out, "%5d  %11.2f %10.2f %7.2f %7.2f  %12.2f %7.2f  %14.2f %9.2f %12.2f %6.1f",
               i, PSA->ae_dt_slope[i], PSA->ae_e_slope[i], PSA->ae_pos[i], PSA->ae_cut[i],
               PSA->dcr_dt_slope[i], PSA->dcr_lim[i], PSA->lamda_dt_slope[i], PSA->lamda_lim[i], PSA->lq_dt_slope[i], PSA->lq_lim[i]);
+      if (PSA->ae_t0[i] && fabs(PSA->ae_t_slope[i]) > 0.00001) {
+        fprintf(f_out, " %12u %10.3e\n", PSA->ae_t0[i], PSA->ae_t_slope[i]);
+      } else {
+        fprintf(f_out, "\n");
+      }
+    }
   }
 
   fclose(f_out);

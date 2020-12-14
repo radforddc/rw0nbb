@@ -8,6 +8,7 @@
 #include "MJDSort.h"
 
 #define VERBOSE 0
+unsigned int get_skim_time(char * fname);
 
 /*  ------------------------------------------------------------ */
 
@@ -26,26 +27,29 @@ int main(int argc, char **argv) {
   FILE       *f_in, *f_out, *f_out_veto;
   struct dirent *de;  // Pointer for directory entry
   DIR           *dp;
-  float      limit_factor = 2.5;
-
+  float      limit_factor = 1.5;
+  unsigned int startTime1, startTime2;
 
   int    take_mean = 0;
-  double opt_bkgnd = 1.0;
+  double opt_bkgnd = -1.0;  // adjust mean to prioritize acceptance over background rejection
+                            // (gives less uncertainty in exposure)
+
+
   if (argc > 1) {
     if (strstr(argv[1], "-m")) {
       take_mean = 1;
       printf("\n ---------------- Taking mean value of cuts ----------\n\n");
     } else if (strstr(argv[1], "-a")) {
-      opt_bkgnd = -1.0;
-      printf("\n ---------------- Optimizing acceptance of cuts ----------\n\n");
+      printf("\n ---------------- Prioritizing acceptance of cuts ----------\n\n");
     } else if (strstr(argv[1], "-b")) {
-      printf("\n ---------------- Optimizing background rejection of cuts ----------\n\n");
+      opt_bkgnd = 1.0;
+      printf("\n ---------------- Prioritizing background rejection of cuts ----------\n\n");
     } else {
       printf("\n Usage: %s [-m -a -b]\n"
-             "        -m : Take mean value of the two cuts\n"
-             "        -a : Emphasize cut acceptance\n"
-             "        -b : Emphasize background rejection (default)\n", argv[0]);
-      return 0;
+             "        -m : Take mean value of the two A/E cuts\n"
+             "        -b : Prioritize background rejection (default)\n", argv[0]);
+
+      printf("\n ---------------- Using default: Prioritizing acceptance of cuts ----------\n\n");
     }
   }
 
@@ -195,6 +199,16 @@ int main(int argc, char **argv) {
     printf(">>> %s\n", line2);
     system(line2);  // restore any saved input files within this working directory
 
+    /* get the start run toimes from the two skim files */
+    sprintf(fn1, "%s/skim.dat", ds1);
+    sprintf(fn2, "%s/skim.dat", ds2);
+    startTime1 = get_skim_time(fn1);
+    startTime2 = get_skim_time(fn2);
+    if (!startTime1 || !startTime2) {
+      printf("\nERROR: No start time for one of the calibrations!\n");
+      return 0;
+    }
+
     /* ---------------------- do interpolation ------------------*/
     memcpy(&PZI, &PZI1, sizeof(PZI));
     memcpy(&CTC, &CTC1, sizeof(CTC));
@@ -204,12 +218,15 @@ int main(int argc, char **argv) {
     double hg1, hg2, lg1, lg2;
 
     for (i=0; i<runInfo.nGe; i++) {
+      PSA.ae_t0[i]      = 0;
       /* decide whether these data are valid (detector working okay) */
+      if (!Dets[i].HGChEnabled) continue;
       if (CTC2.e_dt_slope[i] == 1.0 &&
           CTC2.e_lamda_slope[i] == 1.0 &&
-          CTC2.e_lamda_gain[i] == 1.0) {          // second calibration is invalid, so just take the first one
+          CTC2.e_lamda_gain[i] == 1.0) {          // Second calibration is invalid, so just take the first one
         Dets[i].HGcalib[0]    = Dets1[i].HGcalib[0];
         Dets[i].LGcalib[0]    = Dets1[i].LGcalib[0];
+        printf("!!! Channel %d: Second calibration is invalid, so just taking the first one\n", i);
         continue;
       } else if (CTC1.e_dt_slope[i] == 1.0 &&
                  CTC1.e_lamda_slope[i] == 1.0 &&
@@ -236,111 +253,115 @@ int main(int argc, char **argv) {
         PSA.lq_lim[i]         = PSA2.lq_lim[i];
         Dets[i].HGcalib[0]    = Dets2[i].HGcalib[0];
         Dets[i].LGcalib[0]    = Dets2[i].LGcalib[0];
+        printf("!!! Channel %d: First calibration is invalid, so just taking the second one\n", i);
         continue;
-        }
+      }
           
-        PZI.tau[i]            = (PZI1.tau[i]            + PZI2.tau[i]           ) / 2.0;
-        PZI.baseline[i]       = (PZI1.baseline[i]       + PZI2.baseline[i]      ) / 2.0;
-        PZI.frac2[i]          = (PZI1.frac2[i]          + PZI2.frac2[i]         ) / 2.0;
-        PZI.bl_rms[i]         = (PZI1.bl_rms[i]         + PZI2.bl_rms[i]        ) / 2.0;
+      PZI.tau[i]            = (PZI1.tau[i]            + PZI2.tau[i]           ) / 2.0;
+      PZI.baseline[i]       = (PZI1.baseline[i]       + PZI2.baseline[i]      ) / 2.0;
+      PZI.frac2[i]          = (PZI1.frac2[i]          + PZI2.frac2[i]         ) / 2.0;
+      PZI.bl_rms[i]         = (PZI1.bl_rms[i]         + PZI2.bl_rms[i]        ) / 2.0;
 
-        CTC.e_dt_slope[i]     = (CTC1.e_dt_slope[i]     + CTC2.e_dt_slope[i]    ) / 2.0;
-        CTC.e_lamda_slope[i]  = (CTC1.e_lamda_slope[i]  + CTC2.e_lamda_slope[i] ) / 2.0;
-        CTC.e_lamda_gain[i]   = (CTC1.e_lamda_gain[i]   + CTC2.e_lamda_gain[i]  ) / 2.0;
-        CTC.best_dt_lamda[i]  = (CTC1.best_dt_lamda[i]  + CTC2.best_dt_lamda[i] ) / 2;
+      CTC.e_dt_slope[i]     = (CTC1.e_dt_slope[i]     + CTC2.e_dt_slope[i]    ) / 2.0;
+      CTC.e_lamda_slope[i]  = (CTC1.e_lamda_slope[i]  + CTC2.e_lamda_slope[i] ) / 2.0;
+      CTC.e_lamda_gain[i]   = (CTC1.e_lamda_gain[i]   + CTC2.e_lamda_gain[i]  ) / 2.0;
+      CTC.best_dt_lamda[i]  = (CTC1.best_dt_lamda[i]  + CTC2.best_dt_lamda[i] ) / 2;
 
-        PSA.ae_dt_slope[i]    = (PSA1.ae_dt_slope[i]    + PSA2.ae_dt_slope[i]   ) / 2.0;
-        PSA.ae_e_slope[i]     = (PSA1.ae_e_slope[i]     + PSA2.ae_e_slope[i]    ) / 2.0;
-        PSA.ae_pos[i]         = (PSA1.ae_pos[i]         + PSA2.ae_pos[i]        ) / 2.0;
-        PSA.dcr_dt_slope[i]   = (PSA1.dcr_dt_slope[i]   + PSA2.dcr_dt_slope[i]  ) / 2.0;
-        PSA.lamda_dt_slope[i] = (PSA1.lamda_dt_slope[i] + PSA2.lamda_dt_slope[i]) / 2.0;
-        PSA.lq_dt_slope[i]    = (PSA1.lq_dt_slope[i]    + PSA2.lq_dt_slope[i]   ) / 2.0;
+      PSA.ae_dt_slope[i]    = (PSA1.ae_dt_slope[i]    + PSA2.ae_dt_slope[i]   ) / 2.0;
+      PSA.ae_e_slope[i]     = (PSA1.ae_e_slope[i]     + PSA2.ae_e_slope[i]    ) / 2.0;
+      PSA.ae_pos[i]         = (PSA1.ae_pos[i]         + PSA2.ae_pos[i]        ) / 2.0;
+      PSA.dcr_dt_slope[i]   = (PSA1.dcr_dt_slope[i]   + PSA2.dcr_dt_slope[i]  ) / 2.0;
+      PSA.lamda_dt_slope[i] = (PSA1.lamda_dt_slope[i] + PSA2.lamda_dt_slope[i]) / 2.0;
+      PSA.lq_dt_slope[i]    = (PSA1.lq_dt_slope[i]    + PSA2.lq_dt_slope[i]   ) / 2.0;
 
-        da = PSA2.ae_cut[i]    - PSA1.ae_cut[i];
-        dd = PSA2.dcr_lim[i]   - PSA1.dcr_lim[i];
-        dl = PSA2.lamda_lim[i] - PSA1.lamda_lim[i];
-        dq = PSA2.lq_lim[i]    - PSA1.lq_lim[i];
+      da = PSA2.ae_cut[i]    - PSA1.ae_cut[i];
+      dd = PSA2.dcr_lim[i]   - PSA1.dcr_lim[i];
+      dl = PSA2.lamda_lim[i] - PSA1.lamda_lim[i];
+      dq = PSA2.lq_lim[i]    - PSA1.lq_lim[i];
 
-        ea = (PSA1.ae_pos[i] - PSA1.ae_cut[i] + PSA2.ae_pos[i] - PSA2.ae_cut[i]) / 6.0;  //  1/3 of mean A/E (pos-cut)
-        ed = 8.0/2.355;                // typical σ for DCR peak
-        el = 4.0/2.355;                // typical σ for lamda peak
-        eq = 5.0/2.355;                // typical σ for LQ peak
+      ea = (PSA1.ae_pos[i] - PSA1.ae_cut[i] + PSA2.ae_pos[i] - PSA2.ae_cut[i]) / 6.0;  //  1/3 of mean A/E (pos-cut)
+      ed = 8.0/2.355;                // typical σ for DCR peak
+      el = 4.0/2.355;                // typical σ for lamda peak
+      eq = 5.0/2.355;                // typical σ for LQ peak
 
-        // calculate man values of cuts
-        PSA.ae_cut[i]    += da / 2.0;
-        PSA.dcr_lim[i]   += dd / 2.0;
-        PSA.lamda_lim[i] += dl / 2.0;
-        PSA.lq_lim[i]    += dq / 2.0; // take the mean LQ cut value
-        if (take_mean) {
-          // PSA.lq_lim[i]  = fmax(PSA1.lq_lim[i],      PSA2.lq_lim[i]);               // take the higher LQ cut value
-        } else {
-          // adjust mean to emphasize either acceptance or background rejection
-          double factor = 0.5;  // fudge factor for how quickly the mean is adjusted; range should be 0.5 - 1.0
-          PSA.ae_cut[i]    += opt_bkgnd * da * erf(factor * da / ea) / 2.0;
-          PSA.dcr_lim[i]   -= opt_bkgnd * dd * erf(factor * dd / ed) / 2.0;
-          PSA.lamda_lim[i] -= opt_bkgnd * dl * erf(factor * dl / el) / 2.0;
-          PSA.lq_lim[i]    -= opt_bkgnd * dq * erf(factor * dq / eq) / 2.0;
+      // calculate mean values of cuts
+      PSA.ae_cut[i]    += da / 2.0;
+      PSA.dcr_lim[i]   += dd / 2.0;
+      PSA.lamda_lim[i] += dl / 2.0;
+      PSA.lq_lim[i]    += dq / 2.0; // take the mean LQ cut value
+      if (!take_mean) {
+        // adjust mean to prioritize either acceptance or background rejection
+        double factor = 0.5;  // fudge factor for how quickly the mean is adjusted; range should be 0.5 - 1.0
+        PSA.ae_cut[i]    += opt_bkgnd * da * erf(factor * da / ea) / 2.0;
+        PSA.dcr_lim[i]   -= opt_bkgnd * dd * erf(factor * dd / ed) / 2.0;
+        PSA.lamda_lim[i] -= opt_bkgnd * dl * erf(factor * dl / el) / 2.0;
+        PSA.lq_lim[i]    -= opt_bkgnd * dq * erf(factor * dq / eq) / 2.0;
+      }
+      //instead of mean or acceptance/bgnd, do linear time-interpolation of A/E cut value
+      PSA.ae_cut[i]     = PSA1.ae_cut[i];
+      PSA.ae_t0[i]      = startTime1;
+      PSA.ae_t_slope[i] = 3600.0 * (PSA2.ae_cut[i] - PSA1.ae_cut[i]) / (startTime2 - startTime1); // change in cut value per hour
+
+      hg1 = Dets1[i].HGcalib[0] * exp(dt/PZI.tau[i] - dt/PZI1.tau[i]);
+      hg2 = Dets2[i].HGcalib[0] * exp(dt/PZI.tau[i] - dt/PZI2.tau[i]);
+      lg1 = Dets1[i].LGcalib[0] * exp(dt/PZI.tau[i] - dt/PZI1.tau[i]);
+      lg2 = Dets2[i].LGcalib[0] * exp(dt/PZI.tau[i] - dt/PZI2.tau[i]);
+      Dets[i].HGcalib[0] = (hg1 + hg2) / 2.0;
+      Dets[i].LGcalib[0] = (lg1 + lg2) / 2.0;
+      Dets[i].HGcalib_unc[0] = fabs(hg1 - hg2) / 2.0;  // additional uncertainty in gain from gain or tau changes
+      Dets[i].LGcalib_unc[0] = fabs(lg1 - lg2) / 2.0;
+
+      /* ===================================================================================== */
+      /* =========== check for big changes that imply veto-only status for ββ runs =========== */
+      // gain
+      sprintf(line, " ----- Detector  %2d %s %s veto-only at %s - %s (%d) due to",
+              i, Dets[i].StrName, Dets[i].DetName, ds1, ds2, ic+1);
+      veto = 0;
+      if (Dets[i].DetName[0] == 'P' &&
+          (1 || (i != 30 && i != 31 && i != 32))) {          // list of veto-only detectors for all runs; 1 to ignore
+        // gain  - note multiplication by limit_factor
+        // if (fabs(hg1 - hg2) > limit_factor * 0.0002) {                   // ~ 0.5 ppt ~ 1 keV at Qbb, assuming gain = 0.4
+        if (fabs(hg1 - hg2) > limit_factor * 0.002 * Dets[i].HGcalib[0]) {  // 4 keV * limit_factor at Qbb
+          printf("%s gain change!  %6.2f ppt\n", line, 1000.0 * (hg1 - hg2)/Dets[i].HGcalib[0]);
+          n_veto[i][1]++;
+          if (veto==1) n_veto[i][6]++;  // multiple reasons
+          veto_str[veto++] = 'g';
         }
-
-        hg1 = Dets1[i].HGcalib[0] * exp(dt/PZI.tau[i] - dt/PZI1.tau[i]);
-        hg2 = Dets2[i].HGcalib[0] * exp(dt/PZI.tau[i] - dt/PZI2.tau[i]);
-        lg1 = Dets1[i].LGcalib[0] * exp(dt/PZI.tau[i] - dt/PZI1.tau[i]);
-        lg2 = Dets2[i].LGcalib[0] * exp(dt/PZI.tau[i] - dt/PZI2.tau[i]);
-        Dets[i].HGcalib[0] = (hg1 + hg2) / 2.0;
-        Dets[i].LGcalib[0] = (lg1 + lg2) / 2.0;
-        Dets[i].HGcalib_unc[0] = fabs(hg1 - hg2) / 2.0;  // additional uncertainty in gain from gain or tau changes
-        Dets[i].LGcalib_unc[0] = fabs(lg1 - lg2) / 2.0;
-
-        /* check for big changes that imply veto-only status for ββ runs */
-        // gain
-        sprintf(line, " ----- Detector  %2d %s %s veto-only at %s - %s (%d) due to",
-                i, Dets[i].StrName, Dets[i].DetName, ds1, ds2, ic+1);
-        veto = 0;
-        if (Dets[i].DetName[0] == 'P' &&
-            (1 || (i != 30 && i != 31 && i != 32))) {          // list of veto-only detectors for all runs; 1 to ignore
-          // gain
-          // if (0.0002 < fabs(hg1 - hg2)) {                   // ~ 0.5 ppt ~ 1 keV at Qbb, assuming gain = 0.4
-          if (0.002 * Dets[i].HGcalib[0] < limit_factor * fabs(hg1 - hg2)) {  // 2 ppt = 4 keV at Qbb
-            printf("%s gain change!  %6.2f ppt\n", line, 1000.0 * (hg1 - hg2)/Dets[i].HGcalib[0]);
-            n_veto[i][1]++;
-            if (veto==1) n_veto[i][6]++;  // multiple reasons
-            veto_str[veto++] = 'g';
-          }
-          // A/E
-          if (fabs(PSA1.ae_pos[i] - PSA2.ae_pos[i]) > limit_factor * 3.0*ea) {   //  = mean A/E (pos-cut)
-            printf("%s A/E  change!  %6.2f, pos-cut = %5.2f\n", line,  PSA1.ae_pos[i] - PSA2.ae_pos[i], 3.0*ea);
-            n_veto[i][2]++;
-            if (veto==1) n_veto[i][6]++;  // multiple reasons
-            veto_str[veto++] = 'A';
-          }
-          // DCR
-          if (fabs(dd) > limit_factor * 3.0*ed) {  // ~ 3σ for DCR
-            printf("%s DCR  change!  %6.2f  > %4.2f\n", line, PSA1.dcr_lim[i] - PSA2.dcr_lim[i], 2.0*8.0/2.355);
-            n_veto[i][3]++;
-            if (veto==1) n_veto[i][6]++;  // multiple reasons
-            veto_str[veto++] = 'D';
-          }
-          // LQ
-          if (fabs(dq) > limit_factor * 4.0*eq) {    // ~ 4σ for LQ
-            printf("%s LQ   change!  %6.2f  > %4.2f\n", line, PSA1.lq_lim[i] - PSA2.lq_lim[i], 2.0*5.0/2.355);
-            n_veto[i][4]++;
-            if (veto==1) n_veto[i][6]++;  // multiple reasons
-            veto_str[veto++] = 'Q';
-          }
-          // PZ tau
-          if (fabs(PZI1.tau[i] - PZI2.tau[i]) > /* limit_factor * */ 2.0*0.4/2.355) {          // ~ 2σ for tau
-            printf("%s tau  change!  %6.2f  > %4.2f\n", line, PZI1.tau[i] - PZI2.tau[i], 1.0*0.4/2.355);
-            n_veto[i][5]++;
-            if (veto==1) n_veto[i][6]++;  // multiple reasons
-            veto_str[veto++] = 't';
-          }
+        // A/E  - note multiplication by limit_factor
+        if (fabs(PSA1.ae_pos[i] - PSA2.ae_pos[i]) > limit_factor * 3.0*ea) {   //  = mean A/E (pos-cut) * limit_factor
+          printf("%s A/E  change!  %6.2f, pos-cut = %5.2f\n", line,  PSA1.ae_pos[i] - PSA2.ae_pos[i], 3.0*ea);
+          n_veto[i][2]++;
+          if (veto==1) n_veto[i][6]++;  // multiple reasons
+          veto_str[veto++] = 'A';
         }
-        if (veto) {
-          n_veto[i][0]++;
-          veto_str[veto] = 0;
-          fprintf(f_out_veto, "%3d %9s %9s   %3d  %s %s   %s\n",
-                  ic+1, ds1, ds2, i, Dets[i].StrName, Dets[i].DetName, veto_str);
+        // DCR
+        if (fabs(dd) > 3.0*ed) {              // ~ 3σ for DCR
+          printf("%s DCR  change!  %6.2f  > %4.2f\n", line, PSA1.dcr_lim[i] - PSA2.dcr_lim[i], 2.0*8.0/2.355);
+          n_veto[i][3]++;
+          if (veto==1) n_veto[i][6]++;  // multiple reasons
+          veto_str[veto++] = 'D';
         }
+        // LQ
+        if (fabs(dq) > 4.0*eq) {             // ~ 4σ for LQ
+          printf("%s LQ   change!  %6.2f  > %4.2f\n", line, PSA1.lq_lim[i] - PSA2.lq_lim[i], 2.0*5.0/2.355);
+          n_veto[i][4]++;
+          if (veto==1) n_veto[i][6]++;  // multiple reasons
+          veto_str[veto++] = 'Q';
+        }
+        // PZ tau
+        if (fabs(PZI1.tau[i] - PZI2.tau[i]) > 2.0*0.4/2.355) {        // ~ 2σ for tau
+          printf("%s tau  change!  %6.2f  > %4.2f\n", line, PZI1.tau[i] - PZI2.tau[i], 1.0*0.4/2.355);
+          n_veto[i][5]++;
+          if (veto==1) n_veto[i][6]++;  // multiple reasons
+          veto_str[veto++] = 't';
+        }
+      }
+      if (veto) {
+        n_veto[i][0]++;
+        veto_str[veto] = 0;
+        fprintf(f_out_veto, "%3d %9s %9s   %3d  %s %s   %s\n",
+                ic+1, ds1, ds2, i, Dets[i].StrName, Dets[i].DetName, veto_str);
+      }
     }
     printf("\ndt = %lf, tau = %lf μs, exp(dt/tau) = %lf\n", dt, PZI.tau[1], exp(dt/PZI.tau[1]));
 
@@ -392,3 +413,32 @@ int main(int argc, char **argv) {
   printf("\n>>  All done... processed %d pairs of calibrations.\n\n", nc-1);
   return 0;
 }
+
+/* ----------------------------------------------------------------------- */
+
+unsigned int get_skim_time(char * fname) {
+
+  MJDetInfo  Dets[NMJDETS];
+  MJRunInfo  runInfo;
+  int        nsd;
+  FILE      *f_in;
+
+
+  if (!(f_in = fopen(fname,"r"))) {
+    fprintf(stderr, "\n Failed to open input skim file %s\n", fname);
+    return 0;
+  }
+  fread(&nsd, sizeof(int), 1, f_in);
+  if (nsd == -2) fread(&nsd, sizeof(int), 1, f_in);
+  fread(&Dets[0], sizeof(Dets[0]), NMJDETS, f_in);
+  fread(&runInfo, sizeof(runInfo) - 8*sizeof(int), 1, f_in);
+  if (runInfo.idNum == 0) {
+    printf("Flashcam data...\n");
+    return 1;
+  }
+  printf(" Skim is data starting at %d seconds, run number %d from file %s\n",
+         runInfo.startTime, runInfo.runNumber, runInfo.filename);
+
+  return (unsigned int) runInfo.startTime;
+}
+  

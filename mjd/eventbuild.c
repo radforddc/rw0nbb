@@ -597,6 +597,7 @@ int eventbuild(FILE *f_in, MJDetInfo *Dets, MJRunInfo *runInfo) {
         if (head[1] & 0x2) printf("; quick-start");
         printf(" -------\n");
         if (start_time == 0) start_time = evtdat[1];
+        runInfo->startTime = evtdat[1];
         run_evts_count = 0;
         run_gretina_evts_count = 0;
         current_runNumber = evtdat[0];
@@ -883,13 +884,16 @@ int eventbuild(FILE *f_in, MJDetInfo *Dets, MJRunInfo *runInfo) {
       his[3][dt+4000]++;
       if (start_time_Ge < 0) start_time_Ge = time / 100000000;
 
-      /* add run number, recordID, and previous E and time, to Ge event */
+      /* add run number, recordID, previous E and time, and run start time to Ge event */
       if (evtdat[8] != current_runNumber) {
         evtdat[8]  = current_runNumber;
         evtdat[9]  = recordID;
         evtdat[10] = last_ch_energy[chan];
         evtdat[11] = (time - last_ch_time[chan])/100; // us
       }
+#ifdef DO_PSA
+      evtdat[12] = runInfo->startTime;               // start of curent run in seconds
+#endif
       if (last_bd_time[board] > time+800 && last_ch_time[chan] > time)
         printf(">> ERROR: board chan time previous_time = %2d %3d %12lld %12lld -> %14lld ms\n",
                board, chan, time/100000, last_bd_time[board]/100000,

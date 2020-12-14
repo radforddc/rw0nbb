@@ -14,7 +14,7 @@ all_programs = pulser_tag_init presort PZcal skim skim_opt CTcal PSAcal sortskim
                compress decompress  compress_fcio decompress_fcio deadtime \
                merge_skim interpolateCal check_veto_only
 
-extras = noise coinc pulser_stab get_run_nums get_run_times
+extras = noise coinc pulser_stab get_run_nums get_exposure get_run_times
 
 
 All: $(all_programs)
@@ -118,8 +118,11 @@ pulser_stab: $(mk_source_files) $(mk_header_files) pulser_stab.c eventprocess.c 
 get_run_nums: $(mk_source_files) $(mk_header_files) get_run_nums_times.c
 	$(CC) $(CFLAGS) -D QUIET -D GET_NUMS -o $@ get_run_nums_times.c decode_runfile_header.c -lm
 
+get_exposure: $(mk_source_files) $(mk_header_files) get_run_nums_times.c
+	$(CC) $(CFLAGS) -D QUIET -D GET_EXPOSURE -o $@ get_run_nums_times.c decode_runfile_header.c -lm
+
 get_run_times: $(mk_source_files) $(mk_header_files) get_run_nums_times.c
-	$(CC) $(CFLAGS) -D QUIET -o $@ get_run_nums_times.c decode_runfile_header.c -lm
+	$(CC) $(CFLAGS) -D QUIET -D GET_TIMES -o $@ get_run_nums_times.c decode_runfile_header.c -lm
 
 
 

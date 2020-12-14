@@ -62,6 +62,7 @@ int eventprocess(MJDetInfo *Dets, MJRunInfo *runInfo, int nChData, BdEvent *ChDa
   int     e_onbd, e_offline, e_trapmax, de;
   int     dirty_sig = 0, granularity;  // data cleaning result
   double  s1, s2;
+  float   ae_cut;
   long long int  time;
   unsigned short *head2;
   short          *signal;
@@ -857,6 +858,17 @@ int eventprocess(MJDetInfo *Dets, MJRunInfo *runInfo, int nChData, BdEvent *ChDa
 
       /* ------- do A/E cut ------- */
       a_e_good = a_e_high = 0;
+      ae_cut = PSA.ae_cut[chan];
+      if (PSA.ae_t0[chan]) {
+        /* adjust cut value by linear time-interpolation between enighboring calibrations
+           start time of current run is stored in evtdat[12]  */
+        ae_cut += PSA.ae_t_slope[chan] * (ChData[ievt]->evbuf[14] - PSA.ae_t0[chan])/3600.0;
+        if (0 && chan == 31)
+          printf("chan %d   t0 %u  -> %u   delta_t %.2f hours = %.2f days slope %.3e  cut = %.2f\n",
+                 chan, PSA.ae_t0[chan], ChData[ievt]->evbuf[14], (ChData[ievt]->evbuf[14] - PSA.ae_t0[chan])/3600.0,
+                 (ChData[ievt]->evbuf[14] - PSA.ae_t0[chan])/3600.0/24.0, PSA.ae_t_slope[chan], ae_cut);
+      }
+        
       // adjust for energy dependence of cut
       // first correct for series noise: assume 2*sigma cut
       // series noise contribution to A/E sigma = BL_RMS * sqrt(2*rise) * factor / E_raw

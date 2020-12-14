@@ -33,7 +33,7 @@ char  *GoodDataTypes[] =
 
 int eventprescan(FILE *f_in, FILE *f_out, MJDetInfo *detInfo, MJRunInfo *runInfo);
 int run = 0;
-unsigned int start_time=0, end_time=0;
+unsigned int start_time=0, end_time=0, duration=0, last_duration=0;
 
 
 int main(int argc, char **argv) {
@@ -57,11 +57,72 @@ int main(int argc, char **argv) {
     return 0;
   }
   fprintf(f_out, "# Runs in %s:n\n", argv[1]);
-#else
+#endif
+#ifdef GET_TIMES
   if ((f_out = fopen("run_times.txt", "w")) == NULL) {
     fprintf(stderr, "\n Failed to open output file run_times.txt\n");
     return 0;
   }
+#endif
+
+#ifdef GET_EXPOSURE
+  float  a, b, d, e, g, h, mass[100]={0}, enr_mass[100]={0};
+  float  enr_exp=0, tot_exp=0, venr_exp=0, vtot_exp=0, csenr_exp=0, cstot_exp=0;
+  int    enab[100]={0}, veto[100]={0}, csel[100]={0}, csel_id[1000], csel_start[1000], csel_end[1000];
+  char   name[100][8]={""}, pos[8];
+  int    j, k, l, m, n_csel = 0;
+
+  /* read detector mass info */
+  if ((f_in = fopen("Detector_masses.csv", "r")) == NULL) {
+    fprintf(stderr, "\n Failed to open input file Detector_masses.csv\n");
+    return 0;
+  }
+  i = 0;
+  while (i < 100 && fgets(line, sizeof(line), f_in)) {
+    if (line[0] == '#') continue;
+    if (sscanf(line, "%d,%f,%d,%d,%d,%6s,%7s", &j, &mass[i], &k, &l, &m, &pos, &name[i]) != 7 || i != j) {
+      fprintf(stderr, "\n Failed to read input file Detector_masses.csv\n");
+      return 0;
+    }
+    //enab[i] = l;
+    enab[i] = 1;
+    veto[i] = m;
+    mass[i] /= 1000.0;
+    enr_mass[i] = k * mass[i];
+    i++;
+  }
+  fclose(f_in);
+  printf("%d detector masses read from file Detector_masses.csv\n", i);
+  printf("Det  0 : %8s has mass %.4f kg\n", name[0], mass[0]);
+  printf("Det %d : %8s has mass %.4f kg\n", i-1, name[i-1], mass[i-1]);
+
+  /* read channel selection info */
+  if ((f_in = fopen("veto_only_runs.txt", "r"))) {
+    printf("Reading channel selection info from file veto_only_runs.txt\n");
+    i = 0;
+    while (i < 1000 && fgets(line, sizeof(line), f_in)) {
+      if (line[0] == '#') continue;
+      c = strstr(line, "ds") + 2;
+      sscanf(c, "%5d", &csel_start[i]);
+      c = strstr(c, "ds") + 2;
+      sscanf(c, "%5d", &csel_end[i]);
+      c = strstr(c, " ") + 2;
+      sscanf(c, "%d", &csel_id[i]);
+      if (csel_id[i] >= 0 && csel_id[i] < 100) i++;
+    }
+    n_csel = i;
+    fclose(f_in);
+    printf("Read %d channel selection lines\n", i);
+  }
+
+  if ((f_out = fopen("exposure.txt", "w")) == NULL) {
+    fprintf(stderr, "\n Failed to open output file exposure.txt\n");
+    return 0;
+  }
+  fprintf(f_out,
+          "#             tot_enr   veto_enr   csel_enr    tot_nat   veto_nat   csel_nat    total\n"
+          "# duration   exposure   exposure   exposure   exposure   exposure   exposure   exposure     file_name\n"
+          "#  [days]     [kg-d]     [kg-d]     [kg-d]     [kg-d]     [kg-d]     [kg-d]     [kg-d]\n");
 #endif
 
   /* get data file name from command arguments) */
@@ -109,6 +170,39 @@ int main(int argc, char **argv) {
       fprintf(stderr, "\n ERROR: Scan quit with error\n\n");
       return i;
     }
+#ifdef GET_EXPOSURE
+    sscanf(fname+2, "%5d", &j);  // j = run number for current data subset or file
+    for (i=0; i<nDets; i++) csel[i] = 0;
+    for (i=0; i<n_csel; i++) {
+      if (j >= csel_start[i] && j <= csel_end[i] && !veto[csel_id[i]]) {
+        csel[csel_id[i]] = 1;
+        printf("ChannelSelection rejecting  %s  for DetID %2d\n", fname, csel_id[i]);
+      }
+    }
+
+    a = b = d = e = g = h = 0;
+    for (i=0; i<nDets; i++) {
+      float f = enab[i] * (duration - last_duration) / (3600.0*24.0) * detInfo[i].HGChEnabled;
+      a += mass[i]     * f;
+      b += enr_mass[i] * f;
+      d += mass[i]     * f * veto[i];
+      e += enr_mass[i] * f * veto[i];
+      g += mass[i]     * f * csel[i];
+      h += enr_mass[i] * f * csel[i];
+    }
+    tot_exp += a;
+    enr_exp += b;
+    vtot_exp += d;
+    venr_exp += e;
+    cstot_exp += g;
+    csenr_exp += h;
+    printf( "%8.2f  %10.2f %10.2f %10.2f %10.2f %10.2f %10.2f %10.2f      %s\n",
+            (duration - last_duration)/(3600.0*24.0), b, e, g, a-b, d-e, g-h, a, fname);
+    fprintf(f_out,
+            "%8.2f  %10.2f %10.2f %10.2f %10.2f %10.2f %10.2f %10.2f      %s\n",
+            (duration - last_duration)/(3600.0*24.0), b, e, g, a-b, d-e, g-h, a, fname);
+#endif
+  last_duration = duration;
 
     /* get next input file name */
     if (f_lis) {  // using list file for input names
@@ -151,11 +245,33 @@ int main(int argc, char **argv) {
     fseek(f_in, 4*runInfo.fileHeaderLen, SEEK_SET);
   }
 
-#ifndef GET_NUMS
-  printf("\n>>>  %u %u %u : start end duration (%.1f hrs)\n",
-         start_time, end_time, end_time-start_time, (float) (end_time-start_time)/3600.0);
-  fprintf(f_out, "%u %u %u : start end duration (%.1f hrs)\n",
-          start_time, end_time, end_time-start_time, (float) (end_time-start_time)/3600.0);
+#ifdef GET_TIMES
+  printf("\n>>>  %u %u %u %u : start end difference duration (%.2f %.2f hrs)\n",
+         start_time, end_time, end_time-start_time, duration,
+         (float) (end_time-start_time)/3600.0, duration/3600.0);
+  fprintf(f_out, "%u %u %u %u : start end difference duration (%.2f %.2f hrs)\n",
+          start_time, end_time, end_time-start_time, duration,
+          (float) (end_time-start_time)/3600.0, duration/3600.0);
+#endif
+#ifdef GET_EXPOSURE
+    printf( "#-------------------------------------------------------------------------------------\n"
+            "%8.2f  %10.2f %10.2f %10.2f %10.2f %10.2f %10.2f %10.2f  %s\n",
+            duration/(3600.0*24.0), enr_exp, venr_exp, csenr_exp,
+            tot_exp-enr_exp, vtot_exp-venr_exp, cstot_exp-csenr_exp, tot_exp, "TOTAL");
+    fprintf(f_out,
+            "#-------------------------------------------------------------------------------------\n"
+            "%8.2f  %10.2f %10.2f %10.2f %10.2f %10.2f %10.2f %10.2f  %s\n",
+            duration/(3600.0*24.0), enr_exp, venr_exp, csenr_exp,
+            tot_exp-enr_exp, vtot_exp-venr_exp, cstot_exp-csenr_exp, tot_exp, "TOTAL");
+    printf( "#-------------------------------------------------------------------------------------\n"
+            "#\n# total clean exposure: %10.2f enriched, %10.2f natural  [kg-days]\n",
+            enr_exp - venr_exp - csenr_exp,
+            (tot_exp-enr_exp) - (vtot_exp-venr_exp) - (cstot_exp-csenr_exp));
+    fprintf(f_out,
+            "#-------------------------------------------------------------------------------------\n"
+            "#\n# total clean exposure: %10.2f enriched, %10.2f natural  [kg-days]\n",
+            enr_exp - venr_exp - csenr_exp,
+            (tot_exp-enr_exp) - (vtot_exp-venr_exp) - (cstot_exp-csenr_exp));
 #endif
   fclose(f_out);
 
@@ -173,7 +289,8 @@ int eventprescan(FILE *f_in, FILE *f_out, MJDetInfo *Dets, MJRunInfo *runInfo) {
   static int    dataIdRun=0;
 
   static int first = 1;
-  static int first_runNumber = 0, current_runNumber = 0, last_start_time = 0;
+  static int first_runNumber = 0, current_runNumber = 0;
+  static int last_start_time = 0, last_end_time = 0;
 
 
   if (runInfo->analysisPass < 0) return -1;
@@ -254,19 +371,22 @@ int eventprescan(FILE *f_in, FILE *f_out, MJDetInfo *Dets, MJRunInfo *runInfo) {
 #endif
         current_runNumber = evtdat[0];
         last_start_time   = evtdat[1];
+        if (abs(last_start_time - last_end_time) < 5) last_start_time = last_end_time;
       } else if (head[1] & 0x8) {
         if (VERBOSE)
           printf(" -- %8.8x Heartbeat step %d at %d\n", head[1], evtdat[0], evtdat[1]);
       } else if ((head[1] & 0x29) == 0) {
         printf("   ------- END run %d at %d ------- ( %.1f minutes)\n",
                evtdat[0], evtdat[1], (float) (evtdat[1] - last_start_time)/60.0);
+        last_end_time   = evtdat[1];
+        duration += evtdat[1] - last_start_time;
 
       } else {
         printf("***** ORRunDecoderForRun %8.8x %d %d\n",
                head[1], evtdat[0], evtdat[1]);
       }
-      if (start_time ==0 || start_time > evtdat[1]) start_time = evtdat[1];
-      if (end_time ==0 || end_time < evtdat[1]) end_time = evtdat[1];
+      if (start_time == 0 || start_time > evtdat[1]) start_time = evtdat[1];
+      if (end_time == 0 || end_time < evtdat[1]) end_time = evtdat[1];
       /* ------------- end ORRunDecoderForRun end -------------- */
 
     } else {   // all other event types

@@ -11,13 +11,14 @@ int main(int argc, char **argv) {
 
   MJDetInfo  Dets[NMJDETS];
   MJRunInfo  runInfo;
-  int        argn=1, adjust_aoe_pos = 0, nsd_start = 0;
+  int        argn=1, nsd_start = 0;
+  int        adjust_aoe_pos = 1;     // change 1 to 0 to NOT change skimmed A/E values to a common peak position
   float      aoe_pos1[200] = {1000}, aoe_pos[200]={1000}, a, b, pos;
   char       *c, psa_fname[256], line[256];
   FILE       *f_in, *f_in2, *f_out;
 
   SavedData2 **sd;
-  int     nsd = 0;  // number of data to be read from one file
+  int     nsd = 0;           // number of data to be read from one file
   int     sdchunk = 1000000; // number of SavedData events to malloc at one time
   int     numsd = 0, maxsd = sdchunk;  // number of saved data, and pointer to saved data id
   int     i, j, sd_version = 1;
@@ -40,23 +41,24 @@ int main(int argc, char **argv) {
   /* open skim data file as input */
   while (argn < argc && (f_in = fopen(argv[argn], "r"))) {
 
-    if (argn == 1 || adjust_aoe_pos) {
+    if (adjust_aoe_pos) {
       strncpy(psa_fname, argv[argn], sizeof(psa_fname)-5);
       if ((c = strstr(psa_fname, "skim.dat"))) {
-        strncpy(c, "psa.input", 12);              // replace skim.dat with psa.input
-        if ((f_in2 = fopen(psa_fname, "r"))) {
-          /* read a/e positions from psa.input */
-          while (fgets(line, 256, f_in2)) {
-            if (line[0] == '#') continue;  // # header line
-            if (sscanf(line, "%d %f %f %f", &i, &a, &b, &pos) < 4) continue;
-            if (i >= 0 && i < 200) aoe_pos[i] = pos;
-          }
-          fclose(f_in2);
-          adjust_aoe_pos = 1;
-          printf("A/E positions read from %s\n", psa_fname);
-          if (argn == 1)
-            for (i=0; i<200; i++) aoe_pos1[i] = aoe_pos[i];
+        strncpy(c, "psa.input", 12);              // replace skim.dat in psa_fname with psa.input
+        if (!(f_in2 = fopen(psa_fname, "r"))) {
+          printf("Error: Cannot open file %s. Has script1 been run?\n", psa_fname);
+          return 0;
         }
+        /* read a/e positions from psa.input */
+        while (fgets(line, 256, f_in2)) {
+          if (line[0] == '#') continue;  // # header line
+          if (sscanf(line, "%d %f %f %f", &i, &a, &b, &pos) < 4) continue;
+          if (i >= 0 && i < 200) aoe_pos[i] = pos;
+        }
+        fclose(f_in2);
+        printf("A/E positions read from %s\n", psa_fname);
+        if (argn == 1)
+          for (i=0; i<200; i++) aoe_pos1[i] = aoe_pos[i];
       }
     }
     printf("Reading skim file %s\n", argv[argn]);
@@ -115,8 +117,14 @@ int main(int argc, char **argv) {
     fclose(f_in);
   }
   // save skim data (SavedData) to disk
-  printf("\n >>> Writing skim file merged_skim.dat\n"); fflush(stdout);
-  f_out = fopen("merged_skim.dat", "w");
+  if (adjust_aoe_pos) {
+    printf("\n >>> Writing skim file merged_adj_skim.dat\n"); fflush(stdout);
+    f_out = fopen("merged_adj_skim.dat", "w");
+  } else {
+    printf("\n >>> Writing skim file merged_skim.dat\n"); fflush(stdout);
+    f_out = fopen("merged_skim.dat", "w");
+  }
+
   i = -2;
   fwrite(&i, sizeof(int), 1, f_out);    // flag to tell reading programs to use SavedData2 instead of SavedData
   fwrite(&numsd, sizeof(int), 1, f_out);
@@ -136,7 +144,7 @@ int main(int argc, char **argv) {
     }
   }
   fclose(f_out);
-  printf(" Wrote %d skimmed events of size %lu to skim.dat\n\n", numsd, sizeof(**sd));
+  printf(" Wrote %d skimmed events of size %lu\n\n", numsd, sizeof(**sd));
 
   return 0;
 }

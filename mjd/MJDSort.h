@@ -198,13 +198,16 @@ typedef struct {
   float lq_dt_slope[200];      // factor for drift-time correction of lq value
   float lq_lim[200];           // cut limit for lq = late charge drift value
   // info to be read from filters.input:
-  int e_ctc_rise[200];         // individual trapezoid integration time for e_ctc (samples)
-  int e_ctc_flat[200];         // individual trapezoid flat-top time for e_ctc (samples)
-  int t0_rise[200];            // individual asymmetric trapezoid rise for t0 determination
-  int t0_thresh[200];          // individual asymmetric trapezoid threshold for t0 determination
-  int a_e_rise[200];           // individual triangular filter rise for A/E determination
+  int   e_ctc_rise[200];       // individual trapezoid integration time for e_ctc (samples)
+  int   e_ctc_flat[200];       // individual trapezoid flat-top time for e_ctc (samples)
+  int   t0_rise[200];          // individual asymmetric trapezoid rise for t0 determination
+  int   t0_thresh[200];        // individual asymmetric trapezoid threshold for t0 determination
+  int   a_e_rise[200];         // individual triangular filter rise for A/E determination
   float a_e_factor[200];       // individual multiplication factor for initial scaling of A/E
-  int gerda_aoe[200];          // set to 1 to use GERDA-style A/E instead
+  int   gerda_aoe[200];        // set to 1 to use GERDA-style A/E instead
+  // info for time-interpolation of A/E cut value
+  unsigned int   ae_t0[200];   // time of earlier calib, in s
+  float ae_t_slope[200];       // slope of A/E cut value per hour
 } PSAinfo;
 
 typedef struct {
