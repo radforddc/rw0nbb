@@ -634,6 +634,7 @@ int eventbuild(FILE *f_in, MJDetInfo *Dets, MJRunInfo *runInfo) {
         printf("***** ORRunDecoderForRun %8.8x %d %d\n",
                head[1], evtdat[0], evtdat[1]);
       }
+      if (!good_run) continue;
       board = nModBuf-1;
       crate = 0;
       slot = 0;

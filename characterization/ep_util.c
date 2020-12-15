@@ -1040,7 +1040,7 @@ float autopeak(int *his, int e, float *area_ret, float *fwhm_ret) {
 float autopeak1(int *his, int lo, int hi, float *area, float *fwhm) {
 
   float cent = 0.0f, fwhm0;
-  int   i, j, max=0, w2, lo1, hi1;
+  int   i=lo, j, max=0, w2, lo1, hi1;
 
   *area = 0;
   fwhm0 = *fwhm; // first rough guess

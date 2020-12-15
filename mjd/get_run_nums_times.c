@@ -56,7 +56,7 @@ int main(int argc, char **argv) {
     fprintf(stderr, "\n Failed to open output file run_nums.sh\n");
     return 0;
   }
-  fprintf(f_out, "# Runs in %s:n\n", argv[1]);
+  fprintf(f_out, "# Runs in %s:\n", argv[1]);
 #endif
 #ifdef GET_TIMES
   if ((f_out = fopen("run_times.txt", "w")) == NULL) {
