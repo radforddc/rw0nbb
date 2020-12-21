@@ -17,7 +17,7 @@
 #define NCRATES   3  // total number of VME crates
 
 #define DO_INL  1    // set to 1 to correct for digitizer INL, 0 if INL data not available
-#define PATH_TO_NONLIN_DATA   "/Users/fy2/code2/nonlin_data"
+#define PATH_TO_NONLIN_DATA   "/home/radfordd/code2/rw0nbb/mjd/nonlin_data"
 #define E_THRESHOLDS_FILENAME "thresholds.input"
 #define OB_TRAP_FILENAME      "times.input"
 #define ECAL_FILENAME         "gains.input"
@@ -182,7 +182,8 @@ typedef struct {
   float  e_dt_slope[200];      // factor for drift-time correction of DCR
   float  e_lamda_slope[200];   // factor for lamda correction of energy
   double e_lamda_gain[200];    // relative gain for lamda-corrected energy, relative to CTC-corrected energy
-  int    best_dt_lamda[200];   // indicates which option has better resolution    
+  int    best_dt_lamda[200];   // indicates which option has better resolution
+  char   ctc_fname[256];       // ctc.input path/file name
 } CTCinfo;
 
 typedef struct {

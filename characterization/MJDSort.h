@@ -38,9 +38,11 @@
 // #define A_E_RISE   8     #define A_E_FACTOR 275.0
 // #define A_E_RISE  10     #define A_E_FACTOR 210.0 
 // #define A_E_RISE  12     #define A_E_FACTOR 160.0
-#define A_E_RISE    8       // rise=fall ; flat = 0
+#define A_E_RISE       8    // rise=fall ; flat = 0
 #define A_E_FACTOR 275.0    // multiplication factor for initial scaling of A/E
-#define GERDA_AoE   0       // set to 1 to use GERDA-style A/E instead
+#define GERDA_AoE      0    // set to 1 to use GERDA-style A/E instead
+#define AoE_quad_int   1    // set to 1 to do a quadratic time interpolation of A
+                            //    instead of simply taking the max A value
 
 // default asymmetric trap filter parameters for t0 determination
 //         can be over-ridden by values in filters.input
@@ -71,6 +73,7 @@
    When SHORT_BASELINE is defineD, data cleaning requires a basline of only 620 samples. */
 //#define SHORT_BASELINE
 
+
 /* ----------- data structures ---------- */
 
 /* define data structure to hold all required information about the MJD detectors
@@ -99,7 +102,7 @@ typedef struct{
   int   amplitude, attenuated, finalAttenuated;
   float baselineVoltage;                          // first-stage preamp baseline at zero bias
   int   PTcrate, PTslot, PTchan;                  // pulser-tag crate, clot, ch
-  double HGcalib[10], LGcalib[10];                // energy calibration coefficients
+  double HGcalib[5], HGcalib_unc[5], LGcalib[5], LGcalib_unc[5];   // energy calibration coefficients and uncertainties
 } MJDetInfo;
 
 /* define data structure to hold all required information about run itself;
@@ -176,7 +179,8 @@ typedef struct {
   float  e_dt_slope[200];      // factor for drift-time correction of DCR
   float  e_lamda_slope[200];   // factor for lamda correction of energy
   double e_lamda_gain[200];    // relative gain for lamda-corrected energy, relative to CTC-corrected energy
-  int    best_dt_lamda[200];   // indicates which option has better resolution    
+  int    best_dt_lamda[200];   // indicates which option has better resolution
+  char   ctc_fname[256];       // ctc.input path/file name
 } CTCinfo;
 
 typedef struct {
@@ -192,13 +196,16 @@ typedef struct {
   float lq_dt_slope[200];      // factor for drift-time correction of lq value
   float lq_lim[200];           // cut limit for lq = late charge drift value
   // info to be read from filters.input:
-  int e_ctc_rise[200];         // individual trapezoid integration time for e_ctc (samples)
-  int e_ctc_flat[200];         // individual trapezoid flat-top time for e_ctc (samples)
-  int t0_rise[200];            // individual asymmetric trapezoid rise for t0 determination
-  int t0_thresh[200];          // individual asymmetric trapezoid threshold for t0 determination
-  int a_e_rise[200];           // individual triangular filter rise for A/E determination
+  int   e_ctc_rise[200];       // individual trapezoid integration time for e_ctc (samples)
+  int   e_ctc_flat[200];       // individual trapezoid flat-top time for e_ctc (samples)
+  int   t0_rise[200];          // individual asymmetric trapezoid rise for t0 determination
+  int   t0_thresh[200];        // individual asymmetric trapezoid threshold for t0 determination
+  int   a_e_rise[200];         // individual triangular filter rise for A/E determination
   float a_e_factor[200];       // individual multiplication factor for initial scaling of A/E
-  int gerda_aoe[200];          // set to 1 to use GERDA-style A/E instead
+  int   gerda_aoe[200];        // set to 1 to use GERDA-style A/E instead
+  // info for time-interpolation of A/E cut value
+  unsigned int   ae_t0[200];   // time of earlier calib, in s
+  float ae_t_slope[200];       // slope of A/E cut value per hour
 } PSAinfo;
 
 typedef struct {

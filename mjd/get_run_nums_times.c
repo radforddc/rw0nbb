@@ -2,6 +2,7 @@
 #include <stdlib.h>
 #include <unistd.h>
 #include <string.h>
+#include <math.h>
 
 #include "MJDSort.h"
 #include "runBits.h"
@@ -145,6 +146,26 @@ int main(int argc, char **argv) {
     fprintf(stderr, "\n Failed to open input file %s\n", fname);
     return 0;
   }
+
+#ifdef GET_EXPOSURE
+  FILE *fp2;
+  float dcratio[100];
+  for (i=0; i<100; i++) dcratio[i] = 0;
+
+  /* see if there's a file a3.txt, created by count_dc, matching the unput data file */
+  strncpy(line, fname, sizeof(line));
+  if ((c = strstr(line, "Data")) || (c = strstr(line, "Data"))) {
+    sprintf(c, "a3.txt");
+    if ((fp2 = fopen(line, "r"))) {
+      printf(" ... Reading DC ratio data from %s\n", line);
+      while (fgets(line, sizeof(line), fp2)) {
+        if (line[0] != '#' && sscanf(line, "%d %f", &i, &a) == 2) dcratio[i] = a;
+      }
+      fclose(fp2);
+    }
+  }
+#endif
+
   printf("\n >>> Reading %s\n\n", fname);
   strncpy(runInfo.filename, fname, sizeof(runInfo.filename));
   runInfo.argc = argc;
@@ -187,8 +208,8 @@ int main(int argc, char **argv) {
       b += enr_mass[i] * f;
       d += mass[i]     * f * veto[i];
       e += enr_mass[i] * f * veto[i];
-      g += mass[i]     * f * csel[i];
-      h += enr_mass[i] * f * csel[i];
+      g += mass[i]     * f * fmax(csel[i], dcratio[i]);
+      h += enr_mass[i] * f * fmax(csel[i], dcratio[i]);
     }
     tot_exp += a;
     enr_exp += b;
@@ -226,6 +247,23 @@ int main(int argc, char **argv) {
       fprintf(stderr, "\n Failed to open input file %s\n", fname);
       return 0;
     }
+
+#ifdef GET_EXPOSURE
+    for (i=0; i<100; i++) dcratio[i] = 0;
+    /* see if there's a file a3.txt, created by count_dc, matching the unput data file */
+    strncpy(line, fname, sizeof(line));
+    if ((c = strstr(line, "Data")) || (c = strstr(line, "Data"))) {
+      sprintf(c, "a3.txt");
+      if ((fp2 = fopen(line, "r"))) {
+        printf(" ... Reading DC ratio data from %s\n", line);
+        while (fgets(line, sizeof(line), fp2)) {
+          if (line[0] != '#' && sscanf(line, "%d %f", &i, &a) == 2) dcratio[i] = a;
+        }
+        fclose(fp2);
+      }
+    }
+#endif
+
     strncpy(runInfo.filename, fname, sizeof(runInfo.filename));
     printf("\n >>> Reading %s\n\n", fname);
     fread(&runInfo.fileHeaderLen, 1, sizeof(int), f_in);

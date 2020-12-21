@@ -11,18 +11,19 @@ int main(int argc, char **argv) {
 
   MJDetInfo  Dets[NMJDETS];
   MJRunInfo  runInfo;
+  CTCinfo    CTC;
   int        argn=1, nsd_start = 0;
   int        adjust_aoe_pos = 1;     // change 1 to 0 to NOT change skimmed A/E values to a common peak position
   float      aoe_pos1[200] = {1000}, aoe_pos[200]={1000}, a, b, pos;
-  char       *c, psa_fname[256], line[256];
-  FILE       *f_in, *f_in2, *f_out;
+  char       *c, psa_fname[256], line[256], ds_fname[256];
+  FILE       *f_in, *f_in2, *f_out, *fp;
 
   SavedData2 **sd;
   int     nsd = 0;           // number of data to be read from one file
   int     sdchunk = 1000000; // number of SavedData events to malloc at one time
   int     numsd = 0, maxsd = sdchunk;  // number of saved data, and pointer to saved data id
   int     i, j, sd_version = 1;
-
+  double  calib[200] = {0};
 
 
   if (argc < 2) {
@@ -41,6 +42,48 @@ int main(int argc, char **argv) {
   /* open skim data file as input */
   while (argn < argc && (f_in = fopen(argv[argn], "r"))) {
 
+    /* read charge-trapping correction values corresponding to new skim file */
+    strncpy(ds_fname, argv[argn], sizeof(ds_fname));
+    if ((c = strstr(ds_fname, "/skim.dat"))) {
+      *c = 0;
+    } else {
+      printf("\n ERROR: No directory found in %s; c = %d\n", ds_fname, (int) c);
+      exit(-1);
+    }
+    sprintf(CTC.ctc_fname, "%s/ctc.input", ds_fname);
+    /* read energy correction factors from ctc.input */
+    if (!CTC_info_read(&runInfo, &CTC)) {
+      printf("\n ERROR: No charge-trapping correction data read. Does %s exist?\n", CTC.ctc_fname);
+      exit(-1);
+    }
+    /* read energy calibration gains corresponding to new skim file */
+    sprintf(line, "%s/gains.input", ds_fname);
+    if ((fp = fopen(line, "r"))) {
+      printf("\n Reading energy calibrations from %s, argn = %d\n", line, argn);
+      double g1 = 0.5, g2=1.5;
+      j = 0;
+      while (fgets(line, sizeof(line), fp)) {
+        if (*line != '#' &&
+            sscanf(line, "%d %lf %lf", &i, &g1, &g2) == 3 &&
+            i >= 0 && i < 100) {
+          Dets[i].HGcalib[0] = g1;
+          Dets[i].LGcalib[0] = g2;
+          if (argn == 1 || calib[i] ==  0) {
+            calib[i] = g1;
+            calib[i+100] = g2;
+            printf("i, calib: %d %.4f\n", i, calib[i]);
+          }
+          if (calib[i+100] == 0) calib[i+100] = g2;
+          j++;
+        }
+      }
+      printf("\n %d energy calibrations read, argn = %d\n", j, argn);
+      fclose(fp);
+    } else {
+      printf("ERROR: Cannot open %s !\n", line);
+      exit(-1);
+    }
+
     if (adjust_aoe_pos) {
       strncpy(psa_fname, argv[argn], sizeof(psa_fname)-5);
       if ((c = strstr(psa_fname, "skim.dat"))) {
@@ -57,8 +100,10 @@ int main(int argc, char **argv) {
         }
         fclose(f_in2);
         printf("A/E positions read from %s\n", psa_fname);
-        if (argn == 1)
+        if (argn == 1) {
           for (i=0; i<200; i++) aoe_pos1[i] = aoe_pos[i];
+          printf("   ... and stored for position matching.\n");
+        }
       }
     }
     printf("Reading skim file %s\n", argv[argn]);
@@ -105,6 +150,14 @@ int main(int argc, char **argv) {
            "  Total events now %d\n",
            runInfo.runNumber, runInfo.filename, numsd);
 
+    if (argn > 0) {
+      printf("Adjusting E values by differences in gains\n");
+      for (i = nsd_start; i < numsd; i++) {
+        if ((j = sd[i]->chan) >= 0 && j < 100 && calib[j] > 0.1) sd[i]->e *= Dets[j].HGcalib[0] / calib[j];
+        if (              j >= 100 && j < 200 && calib[j] > 0.1) sd[i]->e *= Dets[j-100].LGcalib[0] / calib[j];
+        //if (j >= 0 && j < 200 && calib[j] < 0.1) printf("i, j, calib: %d %d %.4f\n", i, j, calib[j]);
+      }
+    }
     if (argn > 1 && adjust_aoe_pos) {
       printf("Adjusting A/E values by differences in positions\n");
       for (i = nsd_start; i < numsd; i++) {

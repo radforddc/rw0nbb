@@ -157,3 +157,28 @@ step 3, cut values for DCR, lamda -- CHECK second call
           pos = autopeak3(his[1600 + chan], 400+1000*j, 700+1000*j, &area, &fwhm) - 500.0 - 1000.0*j;
           pos = autopeak3(his[1600 + chan], 1400+1000*j, 1700+1000*j, &area, &fwhm) - 1500.0 - 1000.0*j;
           pos = autopeak3(his[1600 + chan], 6400, 6700, &area, &fwhm) - 6500.0;
+
+
+===============================================
+Notes on evaluating lost exposure from data cleaning in ds5a,b,c
+18 Dec 2020
+- in ds5a/bb/, created:
+     -rwxr-xr-x   1 fy2      300 Dec 18 18:33 ds5a/bb/count_badsigs.sh
+     -rw-r--r--   1 fy2     2185 Dec 18 18:34 ds5a/bb/int.cmd
+     -rwxr-xr-x   1 fy2      466 Dec 18 18:52 ds5a/bb/do_count.sh
+- run do_count.sh from the bb directory
+- counts number of events lost to data cleaning using defult.pdc and no .pdc, stored in ds*/a[12].txt
+
+- wrote count_dc.c, edited get_run_nums_times.c
+- run count_dc from the bb directory
+- creates ds*/a3.txt with extra dead ratio per live detector
+- get_exposure now incorporates that ratio in the calculation of "channel-selection" livetime
+
+commands executed:
+./do_count.sh
+count_dc
+get_exposure ds*/Data
+
+in ds5b,c:
+cp -a ../../ds5a/bb/count_badsigs.sh ../../ds5a/bb/do_count.sh ../../ds5a/bb/int.cmd .
+then same commands as above

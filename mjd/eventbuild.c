@@ -321,10 +321,15 @@ int eventbuild(FILE *f_in, MJDetInfo *Dets, MJRunInfo *runInfo) {
   if (first) {
     for (i=1; i<runInfo->argc; i++) {
       if (runInfo->argv[i][0] == '-' &&
-          strstr(runInfo->argv[i], "g")) {  // -g flag defined in argument list; use good_runs.input
-        if (!(f_in2 = fopen("good_runs.input", "r"))) {
-          printf("ERROR: -g flag set but file good_runs.input does not exist!\n\n");
-          exit(-1);
+          strstr(runInfo->argv[i], "g")) {  // -g flag defined in argument list; use good_runs.input or argv[i+1]
+        char fn[256];
+        strncpy(fn, runInfo->argv[i+1], 256);
+        if (!(f_in2 = fopen(fn, "r"))) {
+          strncpy(fn, "good_runs.input", 256);
+          if (!(f_in2 = fopen(fn, "r"))) {
+            printf("ERROR: -g flag set but neither file %s or good_runs.input exists!\n\n", runInfo->argv[i+1]);
+            exit(-1);
+          }
         }
         n_good_run_list = 0;
         while (fgets(line, sizeof(line), f_in2) &&
@@ -336,7 +341,7 @@ int eventbuild(FILE *f_in, MJDetInfo *Dets, MJRunInfo *runInfo) {
           }
         }
         fclose(f_in2);
-        printf("NOTE: %d good run numbetrs read from file good_runs.input\n", n_good_run_list);
+        printf("NOTE: %d good run numbers read from file good_runs.input\n", n_good_run_list);
         break;
       }
     }

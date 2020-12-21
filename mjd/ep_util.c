@@ -882,7 +882,7 @@ double get_CTC_energy(float *fsignal, int len, int chan, MJDetInfo *Dets, PSAinf
   /* find time-related value for trapping correction */
   s = float_trap_fixed(fsignal, *t0-210, 200, 10)/200.0;  // FIXME?? increase 200 to TRAP_RISE or TRAP_FLAT?
   *drift = (0.7 * *e_raw - s) / 1000.0;   // drift time * charge for use in charge-trapping correction,
-                                          // with some offset to get average near zero
+                                          //with some offset to get average near zero
 
   /* do optimum charge-trapping correction */
   *e_adc = *e_raw + *drift * ctc_factor;
@@ -1796,9 +1796,13 @@ int CTC_info_read(MJRunInfo *runInfo, CTCinfo *CTC) {
     CTC->e_lamda_gain[i]  = 1.0;
     CTC->best_dt_lamda[i]  = 0;
   }
-
-  if (!(f_in = fopen("ctc.input", "r"))) return 0;
-  printf("\n Initializing charge-trapping correction values from file ctc.input\n\n");
+  if (strlen(CTC->ctc_fname) > 0) printf("Trying to open ctc_fname: %s\n", CTC->ctc_fname);
+  if (strlen(CTC->ctc_fname) == 0 || !(f_in = fopen(CTC->ctc_fname, "r"))) {
+    strncpy(CTC->ctc_fname, "ctc.input", sizeof(CTC->ctc_fname));
+    f_in = fopen(CTC->ctc_fname, "r");
+  }
+  if (!f_in) return 0;
+  printf("\n Initializing charge-trapping correction values from file %s\n\n", CTC->ctc_fname);
   while (fgets(line, sizeof(line), f_in)) {
     if (line[0] == '#' || strlen(line) < 4) continue;
     e = 0; f = 1; b = 1;
