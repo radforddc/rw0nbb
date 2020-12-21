@@ -28,7 +28,7 @@ skim:  $(mk_header_files) skim.c decode_runfile_header.c ep_util.c pz_fitter.c
 	$(CC) $(CFLAGS) -o $@ skim.c decode_runfile_header.c ep_util.c pz_fitter.c -lm
 
 merge_skim:  $(mk_header_files) merge_skim.c
-	$(CC) $(CFLAGS) -o $@ merge_skim.c ep_util.c
+	$(CC) $(CFLAGS) -o $@ merge_skim.c ep_util.c -lm
 
 skim_opt:   $(mk_header_files) skim.c decode_runfile_header.c ep_util.c pz_fitter.c
 	$(CC) $(CFLAGS) -DOPT -o $@ skim.c decode_runfile_header.c ep_util.c pz_fitter.c -lm
