@@ -16,14 +16,22 @@ int main(int argc, char **argv) {
 
   MJDetInfo  detInfo[NMJDETS];
   MJRunInfo  runInfo;
-  int        argn=1;
+  int        argn = 1, use_fraction = 0;
 
 
   if (argc < 2) {
     fprintf(stderr,
-            "\nusage: %s fname_in [chnum_lo] [chnum_hi] [e_lo] [e_hi]\n\n",
+            "\nusage: %s [-a n] fname_in [chnum_lo] [chnum_hi] [e_lo] [e_hi]\n"
+            "         option -a: Use only one out of every n events, for faster processing of large datasets\n\n",
             argv[0]);
     return -1;
+  }
+  if (argc > 3 && !strncmp(argv[1], "-a", 2)) {
+    use_fraction = atoi(argv[2]);
+    if (use_fraction < 1 || use_fraction > 100) {
+      fprintf(stderr, "ERROR in use_fraction = %s; aborting.\n\n", argv[2]);
+      return 0;
+    }
   }
   /* open raw/presorted data file as input */
   while (argn < argc && argv[argn][0] == '-') argn += 2;
@@ -81,7 +89,7 @@ void signalselect(FILE *f_in, MJDetInfo *Dets, MJRunInfo *runInfo, int step) {
   short  *signal, sigu[8192], siguc[8192];
   float  fsignal[8192] = {0};
 
-  int    i, j, k, chan, sig_len;
+  int    i, j, k, chan, sig_len, use_fraction = 0, argn=2;
   FILE   *f_out;
   //FILE   *f_mat;
   int    t95, t100, bl;
@@ -91,6 +99,13 @@ void signalselect(FILE *f_in, MJDetInfo *Dets, MJRunInfo *runInfo, int step) {
   static int    clo=0, chi, elo=3000, ehi=7200;
   static int    presum[200] = {0};     // expected presum step (or zero for no presum)
   static PZinfo PZI;
+
+
+  if (runInfo->argc > 3 && !strncmp(runInfo->argv[1], "-a", 2)) {
+    use_fraction = atoi(runInfo->argv[2]);
+    printf("\n Using one of every %d events...\n", use_fraction);
+    argn += 2;
+  }
 
   /*
     step = 1 to get baseline mode
@@ -119,10 +134,10 @@ void signalselect(FILE *f_in, MJDetInfo *Dets, MJRunInfo *runInfo, int step) {
     chi=100+runInfo->nGe-1;
     elo = 3000;
     ehi = 7200;
-    if (runInfo->argc > 2) clo = atoi(runInfo->argv[2]);
-    if (runInfo->argc > 3) chi = atoi(runInfo->argv[3]);
-    if (runInfo->argc > 4) elo = atoi(runInfo->argv[4]);
-    if (runInfo->argc > 5) ehi = atoi(runInfo->argv[5]);
+    if (runInfo->argc > argn) clo = atoi(runInfo->argv[argn++]);
+    if (runInfo->argc > argn) chi = atoi(runInfo->argv[argn++]);
+    if (runInfo->argc > argn) elo = atoi(runInfo->argv[argn++]);
+    if (runInfo->argc > argn) ehi = atoi(runInfo->argv[argn++]);
     if (clo < 0) clo = 0;
     printf("\nChs %d to %d, e_trapmax %d to %d\n\n", clo, chi, elo, ehi);
 
@@ -291,6 +306,7 @@ void signalselect(FILE *f_in, MJDetInfo *Dets, MJRunInfo *runInfo, int step) {
         printf(" %8d evts in, %d out\n", totevts, out_evts); fflush(stdout);
       }
       if (chan < clo || chan > chi) continue;
+      if (use_fraction && totevts % use_fraction != 0) continue;
 
       /* --------------- Gretina4M or 4A digitizer data ---------------- */
       time = (evtdat[3] & 0xffff);
@@ -536,7 +552,7 @@ void signalselect(FILE *f_in, MJDetInfo *Dets, MJRunInfo *runInfo, int step) {
     j = 4000;
     for (i=4001; i<4500; i++)
       if (his[chan][j] < his[chan][i]) j = i;  // mode of frac2 distribution
-    if (his[chan][j] > 200) {
+    if (his[chan][j] > 100) {
       PZI.frac2[chan] = (j - 4000.0) / 4000.0;
       printf("%8.5f\n", PZI.frac2[chan]);
     } else {

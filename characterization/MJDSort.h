@@ -85,9 +85,9 @@ typedef struct{
   int  HVCrate, HVCard, HVChan, HVMax, HVtarget;  // HV info
   char DetName[16], StrName[16];                  // e.g. P42698B and C1P1D1
   int  DetType;                                   // DetType = 0 for natural, 2 for enriched
-  int  PreAmpDigitizer, PreAmpChan;
+  int  PreAmpDigitizer;                           // removed int PreAmpChan for use as DigitizerSerialNumber
   // from digitizer params (HG = high gain,  LG = low gain):
-  int  type;
+  int  DigSerialNum, type;                        // type 0 = 4M = LBNL firmware;  type 1 = 4A = ANL firmware
   int  HGChEnabled, HGPreSumEnabled, LGChEnabled, LGPreSumEnabled;
   int  HGTrigMode, HGLEDThreshold, LGTrigMode, LGLEDThreshold;
   // type 0 = 4M = LBNL firmware
@@ -176,9 +176,9 @@ typedef struct {
 } PZinfo;
 
 typedef struct {
-  float  e_dt_slope[200];      // factor for drift-time correction of DCR
+  float  e_dt_slope[200];      // factor for drift-time correction of energy
   float  e_lamda_slope[200];   // factor for lamda correction of energy
-  double e_lamda_gain[200];    // relative gain for lamda-corrected energy, relative to CTC-corrected energy
+  double e_lamda_gain[200];    // relative gain for lamda-corrected energy, relative to DTC-corrected energy
   int    best_dt_lamda[200];   // indicates which option has better resolution
   char   ctc_fname[256];       // ctc.input path/file name
 } CTCinfo;

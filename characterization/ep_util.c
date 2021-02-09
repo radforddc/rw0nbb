@@ -880,8 +880,16 @@ double get_CTC_energy(float *fsignal, int len, int chan, MJDetInfo *Dets, PSAinf
                             PSA->e_ctc_rise[chan], PSA->e_ctc_flat[chan]) / (double) PSA->e_ctc_rise[chan];
 
   /* find time-related value for trapping correction */
-  s = float_trap_fixed(fsignal, *t0-210, 200, 10)/200.0;  // FIXME?? increase 200 to TRAP_RISE or TRAP_FLAT?
-  *drift = (0.7 * *e_raw - s) / 1000.0;   // drift time * charge for use in charge-trapping correction,
+  // s = float_trap_fixed(fsignal, *t0-210, 200, 10)/200.0;  // FIXME?? increase 200 to TRAP_RISE or TRAP_FLAT?
+  // *drift = (0.7 * *e_raw - s) / 1000.0;   // drift time * charge for use in charge-trapping correction,
+                                             //with some offset to get average near zero
+  int t = PSA->e_ctc_flat[chan];
+  if (*t0 + 2*t + 10 >= len) {
+    t = (len-*t0-15)/2;
+    printf(" chan %d t0 trap time: %d -> %d | %d %d\n", chan, PSA->e_ctc_flat[chan], t, *t0, len);
+  }
+  s = float_trap_fixed(fsignal, *t0, t, 10) / 200.0;  // (sic) this really should be 200.0 
+  *drift = (s - 0.3 * *e_raw) / 1000.0;   // drift time * charge for use in charge-trapping correction,
                                           //with some offset to get average near zero
 
   /* do optimum charge-trapping correction */

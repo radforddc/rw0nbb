@@ -36,6 +36,9 @@ skim_opt:   $(mk_header_files) skim.c decode_runfile_header.c ep_util.c pz_fitte
 CTcal:  $(mk_header_files) CTcal.c decode_runfile_header.c ep_util.c
 	$(CC) $(CFLAGS) -o $@ CTcal.c decode_runfile_header.c ep_util.c -lm
 
+CTcal2:  $(mk_header_files) CTcal2.c decode_runfile_header.c ep_util.c
+	$(CC) $(CFLAGS) -o $@ CTcal2.c decode_runfile_header.c ep_util.c -lm
+
 PSAcal: $(mk_header_files) PSAcal.c  decode_runfile_header.c ep_util.c
 	$(CC) $(CFLAGS) -o $@ PSAcal.c decode_runfile_header.c ep_util.c -lm
 
@@ -62,6 +65,10 @@ siginspect:  $(mk_header_files) siginspect.c decode_runfile_header.c ep_util.c
 
 presort: $(mk_source_files) $(mk_header_files) presort.c eventprocess.c ep_finalize.c
 	$(CC) $(CFLAGS) -D PRESORT -o $@ presort.c decode_runfile_header.c eventbuild.c \
+                 eventprocess.c ep_util.c ep_finalize.c -lm
+
+presort_nogran: $(mk_source_files) $(mk_header_files) presort.c eventprocess.c ep_finalize.c
+	$(CC) $(CFLAGS) -D PRESORT -D EXCLUDE_GRAN -o $@ presort.c decode_runfile_header.c eventbuild.c \
                  eventprocess.c ep_util.c ep_finalize.c -lm
 
 prebuild: $(mk_header_files)  presort.c decode_runfile_header.c ep_util.c prebuild.c

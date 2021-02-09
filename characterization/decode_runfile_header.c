@@ -217,7 +217,7 @@ int decode_runfile_header(FILE *f_in, MJDetInfo *DetsReturn, MJRunInfo *runInfo)
   } GeHVinfo;
 
   typedef struct{    // Ge WF digitizer info from ORGretina4MModel or ORGretina4AModel
-    int  crate, slot;
+    int  crate, slot, SerialNumber;
     int  type;       // 0 for ORGretina4M, 1 for ORGretina4A
     int  ChEnabled[10], LEDThreshold[10];
     //----------------- for type 0 = 4M
@@ -367,7 +367,7 @@ int decode_runfile_header(FILE *f_in, MJDetInfo *DetsReturn, MJRunInfo *runInfo)
           if (7 > sscanf(line, "%d,%d,%d,%d,%d,%d,%d,%d,%d,%d",                    // various integers
                            &MJMDets[nMJDets].OrcaDetID, &MJMDets[nMJDets].crate,
                            &MJMDets[nMJDets].slot,      &MJMDets[nMJDets].chanLo,
-                           &MJMDets[nMJDets].chanHi,    &MJMDets[nMJDets].PreAmpChan,
+                           &MJMDets[nMJDets].chanHi,    &j,                        // &MJMDets[nMJDets].PreAmpChan,
                            &MJMDets[nMJDets].HVCrate,   &MJMDets[nMJDets].HVCard,
                            &MJMDets[nMJDets].HVChan,    &MJMDets[nMJDets].HVMax) ||
               2  != sscanf(c+1, "%d,%d",
@@ -383,7 +383,7 @@ int decode_runfile_header(FILE *f_in, MJDetInfo *DetsReturn, MJRunInfo *runInfo)
                    nMJDets, MJMDets[nMJDets].OrcaDetID,
                    MJMDets[nMJDets].DetName, MJMDets[nMJDets].crate,
                    MJMDets[nMJDets].slot,    MJMDets[nMJDets].chanLo,
-                   MJMDets[nMJDets].chanHi,  MJMDets[nMJDets].PreAmpChan,
+                   MJMDets[nMJDets].chanHi,  j,                                   // MJMDets[nMJDets].PreAmpChan,
                    MJMDets[nMJDets].HVCrate, MJMDets[nMJDets].HVCard,
                    MJMDets[nMJDets].HVChan,  MJMDets[nMJDets].HVMax);
           MJMDets[nMJDets].PTcrate = MJMDets[nMJDets].PTslot = MJMDets[nMJDets].PTchan = -1;
@@ -673,9 +673,10 @@ int decode_runfile_header(FILE *f_in, MJDetInfo *DetsReturn, MJRunInfo *runInfo)
         if (10 != read_int_array(f_in, &GeDig[nGeDig].PreSumEnabled[0], 10, line)) return -1;
         CHECK_FOR_STRING("<key>Prerecnt</key>");
         if (10 != read_int_array(f_in, &GeDig[nGeDig].Prerecnt[0], 10, line)) return -1;
-        // if (discard(f_in, 2, line,  "<key>Serial Number</key>")) return -1;
-        if (strstr(line, "<key>Serial Number</key>"))
-          discard(f_in, 2, line,  "<key>Serial Number</key>");
+        if (strstr(line, "<key>Serial Number</key>")) {
+          if (read_int(f_in, &GeDig[nGeDig].SerialNumber, line)) return -1;
+          //discard(f_in, 2, line,  "<key>Serial Number</key>");
+        }
         CHECK_FOR_STRING("<key>TPol</key>");
         if (10 != read_int_array(f_in, &GeDig[nGeDig].TrigPolarity[0], 10, line)) return -1;
         CHECK_FOR_STRING("<key>TRAP Threshold</key>");
@@ -1195,6 +1196,7 @@ int decode_runfile_header(FILE *f_in, MJDetInfo *DetsReturn, MJRunInfo *runInfo)
       if (MJMDets[i].crate == GeDig[j].crate &&
           MJMDets[i].slot  == GeDig[j].slot) {
         k = MJMDets[i].chanHi;
+        MJMDets[i].DigSerialNum    = GeDig[j].SerialNumber;
         MJMDets[i].type            = GeDig[j].type;
         MJMDets[i].HGChEnabled     = GeDig[j].ChEnabled[k];
         MJMDets[i].HGLEDThreshold  = GeDig[j].LEDThreshold[k];
@@ -1234,6 +1236,7 @@ int decode_runfile_header(FILE *f_in, MJDetInfo *DetsReturn, MJRunInfo *runInfo)
     if (j >= nGeDig) {
       printf(" Error: Detector %d has no associated digitizer!"
              "   Crate, slot = %d %d\n", i, MJMDets[i].crate, MJMDets[i].slot);
+      MJMDets[i].DigSerialNum    = 0;
       MJMDets[i].type            = 0;
       MJMDets[i].HGChEnabled     = MJMDets[i].LGChEnabled     = 0;
       MJMDets[i].HGLEDThreshold  = MJMDets[i].LGLEDThreshold  = 0;

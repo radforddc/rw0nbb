@@ -73,9 +73,9 @@ int main(int argc, char **argv) {
   for (i=0; i<nDets; i++) {
     if (i%20 == 0)
       printf("#    DetID      pos      name     HiGain GAT Enab Thresh     HVch  MaxV Target"
-             "     Pulser times enab  ampl atten  CC\n");
+             "     Pulser times enab  ampl atten  CC    DigSerialNum\n");
     printf(" %3d  was %2d %8s %9s   %d,%2.2d,%d %4d %3d %6d %3d,%2.2d,%d"
-           " %5d %6d %9d %7d %3d %5d %3d %d %3d\n", i,
+           " %5d %6d %9d %7d %3d %5d %3d %d %3d %8d\n", i,
            detInfo[i].OrcaDetID,       detInfo[i].StrName,
            detInfo[i].DetName,         detInfo[i].crate,
            detInfo[i].slot,            detInfo[i].chanHi,
@@ -87,7 +87,7 @@ int main(int argc, char **argv) {
            detInfo[i].pulseHighTime,   detInfo[i].pulseLowTime,
            detInfo[i].pulserEnabled,   detInfo[i].amplitude,
            detInfo[i].attenuated,      detInfo[i].finalAttenuated,
-           detInfo[i].CCnum);
+           detInfo[i].CCnum,           detInfo[i].DigSerialNum);
   }
 #endif
 

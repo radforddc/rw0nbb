@@ -1,4 +1,5 @@
 cp -a ../mjd/CTcal.c .
+cp -a ../mjd/CTcal2.c .
 cp -a ../mjd/PSAcal.c .
 cp -a ../mjd/PZcal.c .
 cp -a ../mjd/decode_runfile_header.c .

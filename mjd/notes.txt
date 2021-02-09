@@ -1,53 +1,42 @@
-UPDATED nores,txt, starting from August 2019 when codes were reqritten
+UPDATED notes.txt, starting from August 2019 when codes were rewritten
 
 TODO:
 
-Experiment with PZ fitter time range
+Library-PSA for detector IDs 30, 50 (have poor A/E selectivity)
+
+Experiment with PZ fitter time range?
 
 For E_lamda, subtract total mean value of lamda before applying correction?
 (like is done in PSAcal, between sp 1601 and 1401)
 
-Library-PSA for detector IDs 30, 50 (have poor A/E selectivity)
-
-
 [ ADD Gretina4A support to: compress*, decompress*, run_check, siginspect, prebuild ]
 [ anl_firmware: crate 2 slot 6 -> detectors 29, 30, 34, [37], 44  (37 disabled) ]
 
-drift-time cuts??
-c2p1d4 (ch 32) PZ/DCR instability
-10 Mz noise subtraction
+drift-time cuts?
+10 Mz noise subtraction?
 burst cut
-
 track down rundiff / rundiff2 bug in DS0
+
+Use mean E DTC/lamda factors, most common DT/Lamda correction option?
+Keep LQ DTC factor for PSAcal -a option?
+
+[DONE: PZcal: Skip fraction of events for long calib subsets]
 
 =====================================
 
-How to handle chs with no pulser?
-            - 42; 142, *138*
-           ?- use calibration runs?
-           ?- scale 138 LG slopes from HG?
-           ?- why no pulsers in 138? 38 sees plenty. Is it just these runs?
-
-dCoding:
-get rid of oldTime in eventbuild.c?
-
+Coding:
         add a check on "expected pulser counts" based on duration of run
         investigate rate-oscillation runs
-        improved way of finding narrowest peak in CTprocess/ep_finalize
-
-        EnergyCal stability
+        improved FWHM & pos determination for 2614-keV peaks?
         Veto logic
-        LN-fill (20 mins) and noise-burst veto
+        LN-fill (20 mins) and noise-burst veto?
         Reading stage 1 baselines, HV currents?
-        General clean-up, e.g. too many little undocumented hacks
 
 Tuning/results:
         Check/tune data cleaning cuts
-              ?- does slope cut remove early low-ampl pulses due to walk?
-              ?- increase margin of error for baseline, rms, slope, pulser-tag energy?
+              - does slope cut remove early low-ampl pulses due to walk?
 
 Some files to process:
-
    - DS0/DS1 without trigger card???  Try prebuilding?
              2016-1-20-P3KJR_Run9768  - Ge delta-time = 6440 s
              2016-2-7-P3KJR_Run10329  - More than 200 sub-events in built event!
@@ -59,27 +48,29 @@ Some thoughts about the DCR cut
 ===============================
 
 - The Signal acceptance  of the DCR cut should be evaluated with the DE peak, not continuum or FE peak
-- Need pileup rejection of calib signals to evaluate acceptance?
-- Need to cut on baseline value and slope of calib signals to evaluate acceptance?
+- Need pileup rejection of calib signals to properly evaluate acceptance
+- Need to cut on baseline value and slope of calib signals to properly evaluate acceptance
+      - but with the high DCR cut used, both of the acceptance issues above are negligible?
 - Does calib signal acceptance overlap with Li signal degradation / bb peak acceptance?
 - Using presummed (longer) signals gives some increase in DCR sensitivity, probably 20% - 40% or so
 - The delayed charge appears to continue for ~25 us in at least some cases. Need to check that for more detectors...
-- Should be able to extract rough radius from drift time, comparing e.g. t(1-70%) expt vs sim
-- Temperature-dependence of DCR release time?
+- Should be able to extract rough radius from drift time, comparing expt vs sim
+- Temperature-dependence of DCR release time? (seems to be very small; due to diffusion?)
 
 -------------------------------------------------------------------
 
+To prepare a script for running pulser_tag_init:
 head -1 *.lis | grep ds5 > ptag.sh
 sed "s\ds5\pulser_tag_init ds5\g" ptag.sh > j; mv j ptag.sh
 emacs -> add text:
   pulser_tag_init ds5/2016-11-10-P3LQK_Run19502 | tee out/ptag19502.txt
 
-
+ORNL cluster queue commands:
 qsub -IV
 qsub <command>
 qstat
 showq
-
+qdel
 
     p3kjr 2015.12.24 -
 DS3 p3kjr 2016.09.09 - 2016.10.10
@@ -89,26 +80,6 @@ DS4 p3lqg 2016.09.09 - 2016.10.10
 DS5 p3lqk 2016.10.13 -
 
 ===============================================
-git:
-
-instead of "svn co" do
-git clone https://github.com/mppmu/GAT.git
-
-instead of "svn update" do
-git pull   (do this before a push?)
-
-instead of "svn commit" do
-git commit [files]
-git push
-
-also
-git add <filename>
-If you want to set the editor only for Git, do either (you don’t need both):
-
-Set core.editor in your Git config: git config --global core.editor "emacs"
-Set the GIT_EDITOR environment variable: export GIT_EDITOR=emacs
-
-===============================================
 
 library PSA:
             DEP       SEP        FEP    Continuum
@@ -116,11 +87,12 @@ library PSA:
 A/E-PSA   6659(88)    659(50)   6808(83)            sp 3 - 9
    Diff    103         71       1131        2215    sp 9
       %    1.5        9.7       14.2         5.3
-PSA   6791(89)    805(53)   8214(91)   42638    sp 10
+    PSA   6791(89)    805(53)   8214(91)   42638    sp 10
 
 
 
 ===============================================
+
 Notes on autopeak/autopeak/autopeak3/autopeak4 in ep_util.c
 -----------------------------------------------------------
 
@@ -159,26 +131,55 @@ step 3, cut values for DCR, lamda -- CHECK second call
           pos = autopeak3(his[1600 + chan], 6400, 6700, &area, &fwhm) - 6500.0;
 
 
-===============================================
-Notes on evaluating lost exposure from data cleaning in ds5a,b,c
-18 Dec 2020
-- in ds5a/bb/, created:
-     -rwxr-xr-x   1 fy2      300 Dec 18 18:33 ds5a/bb/count_badsigs.sh
-     -rw-r--r--   1 fy2     2185 Dec 18 18:34 ds5a/bb/int.cmd
-     -rwxr-xr-x   1 fy2      466 Dec 18 18:52 ds5a/bb/do_count.sh
-- run do_count.sh from the bb directory
-- counts number of events lost to data cleaning using defult.pdc and no .pdc, stored in ds*/a[12].txt
+----------------------------------------------------- 2020-Dec
+Added several codes and modified analysis process
+-------------------------------------------------
+Added/modified codes:
+- Fixed bug in autopeak3 that would sometimes find peaks outside the initial range of bins
+    - was affecting DCR, landa, and LQ
+- To choose mean PZ and gain params, and best DCR, lamda, LQ cuts, and do time-linear
+     interpolation of A/E cuts for bb runs between calibrations: interpolateCal
+     - also produces veto_only_runs.txt for channel selection of those bb runs
+- To list runs in a presorted DS* file: get_run_nums (from get_run_nums_times.c)
+  - can be used to make a good_runs.input file to split data subsets
+    presort -g good_runs.input DSxxxxx
+- To evaluate exposure: interpolateCal (produces veto_only_runs.txt, used by check_veto_only and by get_exposure)
+                        count_dc       (for estimating data-cleaning acceptance efficiency, used on bb runs)
+                        get_exposure   (from get_run_nums_times.c)
+- To merge all calibration skim.dat files from a dataset:   merge_skim
+- To investigate stability correlations for detectors with working pulsers: pulser_stab
 
-- wrote count_dc.c, edited get_run_nums_times.c
-- run count_dc from the bb directory
-- creates ds*/a3.txt with extra dead ratio per live detector
-- get_exposure now incorporates that ratio in the calculation of "channel-selection" livetime
+Changed process:
+- Instead of just using long calibrations to define A/E_(pos-cut) values, use merge_skim
+    to make a merged skim file from the whole data set, and run PSAcal on that
+    then copy results to indiidual calib subsets and run PSAcal -a skim.dat on them
+- Use INL_DCR_input.sec from merged skim analysis in all calib and bb subsets
+- Use interpolateCal to propagate best CTCcal/PSAcal params and cuts to intermediate bb runs
+    and to do channel selection on final event lists
+    and to use a common DTC factor for A/E and LQ, and a common E correction factor for A/E
 
-commands executed:
-./do_count.sh
-count_dc
-get_exposure ds*/Data
+----------------------------------------------------- 2021-Jan-05
 
-in ds5b,c:
-cp -a ../../ds5a/bb/count_badsigs.sh ../../ds5a/bb/do_count.sh ../../ds5a/bb/int.cmd .
-then same commands as above
+Added CTcal2.c:
+- QUADRATIC fit to E_raw vs. drift time -> E_qdtc  <- always at least as good as the linear E_ctc in CTcal.c
+- also quadratic fit to E_raw vs. lamda but this makes no improvement
+- option to take mean of E_qdtc and E_lamda; often better than either energy value by itself!
+
+Modest improvement in summed spectra (fits using 0.5 keV/bin, so some extra width)
+For enriched detectors in ds6a/cal/ds37004L:
+FWHM 2.58 -> 2.51   FWTM 4.79 -> 4.65
+For all detectors in ds6a/cal/ds37004L:
+FWHM 2.55 -> 2.48   FWTM 4.72 -> 4.59
+
+Bigger improvement for two ICPC detectors in ds8/cal/ds67202L (again fits using 0.5 keV/bin)
+ID 43  FWHM 2.73 -> 2.48    FWTM 5.22 -> 4.74  -0.25
+ID 43  FWHM 2.63 -> 2.63    FWTM 5.13 -> 5.13 unchanged
+ID 43  FWHM 2.63 -> 2.41    FWTM 4.97 -> 4.54  -0.22
+ID 47  FWHM 2.77 -> 2.77    FWTM 5.66 -> 5.66 unchanged
+
+Could make further improvements by setting a threshold on drift time,
+  above which we correct only using lamda?
+
+2021-01-10: Tried doing linear fit to match DCR to lamda, then taking the *mean* of dcr' and lamda to use for e_lamda
+            - very marginal improvement in some detectors, overall slightly worse performance
+            - commented out that code in CTcal2.c

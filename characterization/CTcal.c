@@ -121,15 +121,15 @@ int main(int argc, char **argv) {
     char fname[64];
     sprintf(fname, "CT_ch%3.3d_2d.dat", CHAN_2D);
     f_out_2d = fopen(fname, "w");
-    fprintf(f_out_2d, "#chan    E_ctc    E_raw       DT   DT_corr    lamda lamda_corr  A/E\n");
+    fprintf(f_out_2d, "#chan    E_ctc    E_raw       DT   DT_corr    lamda lamda_corr  A/E   E_lamda\n");
   }
 
   // end of initialization
   // start loop over reading events from input file
 
-  // ---------------------- steps 1-5 ----------------------
-  for (int step = 1; step <= 5; step++) {
-    printf(" ******************** Step %d of 5 ********************\n", step);
+  // ---------------------- steps 1-4 ----------------------
+  for (int step = 1; step <= 4; step++) {
+    printf(" ******************** Step %d of 4 ********************\n", step);
 
     /*
      * Step 1: Histogram: E_raw
@@ -170,7 +170,7 @@ int main(int argc, char **argv) {
 
       /* ----------------------------------------------------------------------------------------
        * I tried subtracting the mean value of lamda, as a fuction of E, to correct residual INL's
-       *   before using lamda to do a charge-trapping orrection to the energy.
+       *   before using lamda to do a charge-trapping correction to the energy.
        *   But we can't do this!  It artificially modifies the 2614 peak shape and FWHM in an
        *   unphysical way. It can shift the energy of an event by an amount proportional to the
        *   deriviative of the spectrum.
@@ -212,17 +212,24 @@ int main(int argc, char **argv) {
         } else {
           his[1400+chan][(int) (2.0*e_ctc + 0.5)]++;
         }
+        // his[1400+chan][(int) (e_ctc + e_lamda + 0.5)]++;
         // test for effect of 0.5-keV binning on FWHM:
-        if (e_ctc > 1310 && e_ctc < 2750) his[2000+chan][(int) (4.0*(e_ctc-1307.25) + 0.5)]++;
+        if (e_ctc > 1310 && e_ctc < 2750) {
+          if (CTC.best_dt_lamda[chan]) {
+            his[2000+chan][(int) (4.0*(e_lamda-1307.25) + 0.5)]++;
+          } else {
+            his[2000+chan][(int) (4.0*(e_ctc-1307.25) + 0.5)]++;
+          }
+        }
       }
       // make file for 2D plots  of E vs CTC
       // roi_elo = DEP_E - 40.0;
       // if (f_out_2d && step == 4 && chan == CHAN_2D && e_ctc >= roi_elo && e_ctc <= roi_elo+80)
       roi_elo = CAL_E - 40.0;
       if (f_out_2d && step == 4 && chan == CHAN_2D && e_ctc >= roi_elo && e_ctc <= roi_elo+700)
-        fprintf(f_out_2d, "%4d %9.3f %8.3f  %8.3f %6.3f %10.3f %6.3f %10.2f\n",
+        fprintf(f_out_2d, "%4d %9.3f %8.3f  %8.3f %6.3f %10.3f %6.3f %10.2f %10.3f\n",
                 chan, e_ctc, e_raw*gain, drift, drift*CTC.e_dt_slope[chan]*gain,
-                lamda, drift*CTC.e_lamda_slope[chan]*gain, aovere);
+                lamda, lamda*CTC.e_lamda_slope[chan]*gain, aovere, e_lamda);
 
       /* find optimum drift-time correction for energy */
       /* energy drift-time / trapping correction... */
