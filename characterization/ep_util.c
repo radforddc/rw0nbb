@@ -59,6 +59,7 @@ int checkForPulserEvent(MJDetInfo *Dets, MJRunInfo *runInfo,
   float    energy;
   long long int  time=0, dt;
   static int n_error_msgs = 0, n_error2_msgs = 0;
+  static int remainder[200] = {0};
 
 
   for (i=0; i<10; i++) nCC[i] = 0;
@@ -137,7 +138,16 @@ int checkForPulserEvent(MJDetInfo *Dets, MJRunInfo *runInfo,
             (dt+2*k+8) % pt->ccdt[Dets[idet].CCnum] <= 4*k+16) { // allow dt to slip by 2 us per cycle,
           // plus 8 us for the resolving time
           pulser = 1;
+        } else if (llabs(remainder[Dets[idet].CCnum] - dt % pt->ccdt[Dets[idet].CCnum]) < 2) {
+          /* the anomalous pulser-tag remainder for this detector in this event is the same as for this
+             detector the last time we were here! Probably correct, so take this event as new pulser time */
+          pulser = 1;
+          printf("pulser tag check: chan %3d  dt = %8lld   pdt = %8lld  remainder(%d) %8lld taken as new CC pulser time\n",
+                 chan, dt, pt->ccdt[Dets[idet].CCnum], k,
+                 dt % pt->ccdt[Dets[idet].CCnum]);
+          pt->cct0[Dets[idet].CCnum] = time;
         } else {
+          remainder[Dets[idet].CCnum] = dt % pt->ccdt[Dets[idet].CCnum];
           if (1 && ++n_error_msgs < 100) {
             printf("Hmm.. pulser tag check: chan %3d   "
                    "dt = %8lld   pdt = %8lld  remainder(%d) %8lld\n",
