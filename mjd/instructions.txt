@@ -131,19 +131,22 @@ After PSAcal has been run on all calibrations, and psa.input files are available
 - cd to dsxx/cal directory
 
 > merge_skim ds*/skim.dat
-> PSAcal  merged_skim.dat    << generates psa.output for the common/merged skim file from all calibs
+> CTcal   merged_adj_skim.dat
+> mv ctc.output ctc.input; mv gains.output gains.input
+> PSAcal  merged_adj_skim.dat                      << generates psa.output for the common/merged skim file from all calibs
+> mv psa.output psa_merged_adj.output
 
 copy  psa.output to all ds* subdirectories, as psa.input,
 then re-run PSAcal -a on all calib skim.dat files.
 
-make_cal_script2 ; script2.sh does all tgis automatically
+make_cal_script2 ; script2.sh does all this automatically
 
 
 -----------------------------------------------------------------------------------------
 
 6. Somewhat optional: Run interpolateCal to interpolate the PSA parameters and PSA cuts between consecutive cablrations, and
    also identify any enriched detectors that should probably be treaded as veto-only during the intervening background runs.
-   It generates PZ.interp, ctc.interp, gains.interp, and psa.interp files to use as *.inout files in the background runs.
+   It generates PZ.interp, ctc.interp, gains.interp, and psa.interp files to use as *.input files in the background runs.
    It also generates a file called veto_only_runs.txt.
 
 7. Then copy PZ.input, gains.input, ctc.input, and psa.input files (or copy and rename the equivalent .interp files) from the
@@ -173,8 +176,14 @@ Finally, process the background/physics runs. (if not using make_bb_script1 and 
 
 post-analysis: from bb subdirectory, run:
 
-cp -a ../../DetectorMasses.csv .
-get_exposure ds*/DS[0-9]                       -> makes exposure.txt
+cp -a ../../Detector_masses.csv .
+get_exposure ds*/DS*[0-9]                       -> makes exposure.txt
 ln -s ../cal/veto_only_runs.txt
 cat ds*/evl.txt > evl.txt
 check_veto_only veto_only_runs.txt evl.txt     -> makes evl_cvo.txt
+
+
+
+To make stability plots:
+> ls -1d cal/ds*> j
+> ./do_stab_plot.sh

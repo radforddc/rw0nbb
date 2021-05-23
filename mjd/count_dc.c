@@ -31,7 +31,8 @@ int main(int argc, char **argv) {
     return 0;
   }
   while ((de = readdir(dp)) != NULL) {
-    if (strstr(de->d_name, "ds")) strncpy(subset_dir, de->d_name, sizeof(subset_dir));
+    if (strstr(de->d_name, "ds") == de->d_name)
+      strncpy(subset_dir, de->d_name, sizeof(subset_dir));
     sprintf(line, "%s/a1.txt",subset_dir);
     if (!(fp1 = fopen(line, "r"))) {
       // printf("%s does not exist?\n", line);

@@ -12,7 +12,26 @@
 #define FWHM_RATIO 0.95 // ratio of FWHM to decide between E_dt and E_lamda charge-trapping correction
 #define FIT_CTC_QLC 0   // For qdratic lamda energy fir, switches between e_raw (0) and e_ctc_adc (1)
 
-/*  ------------------------------------------------------------ */
+
+/* -------------------------------------------------------------------
+
+ctc.rms:
+Sp ID        n:   detID n,  raw uncorrected energy [ADC]
+Sp ID  200 + n:   detID n,  Energy DT-corrected with test factors
+Sp ID  400 + n:   detID n,  Energy lamda-corrected with test factors
+Sp ID  600 + n:   detID n,  DT-corrected energy [ADC]
+Sp ID  800 + n:   detID n,  lamda-corrected energy [ADC]
+Sp ID 1000 + n:   detID n,  DT-corrected energy [0.5 keV]
+Sp ID 1200 + n:   detID n,  lamda-corrected energy [0.5 keV]
+Sp ID 1400 + n:   detID n,  optimally corrected energy [0.5 keV]
+Sp ID 1600 + n:   detID n,  drift time, misc
+Sp ID 1800 + n:   detID n,  raw (non-DT-corrected) energy [0.5 keV]
+Sp ID 2000 + n:   detID n,  optimally corrected energy [0.25 keV]
+
+The detID is  0-57 for high gain channels, 100-157 for low gain.
+
+   ------------------------------------------------------------------- */
+
 
 int main(int argc, char **argv) {
 
@@ -61,6 +80,7 @@ int main(int argc, char **argv) {
   int    i, j, roi_elo;
   int    *his[HIS_COUNT];
   float  his2[16384]={0};
+  int    *his3[1000];
   FILE   *fp, *f_out, *f_out_2d = NULL;
 
   double s00[2][200]={{0}}, s01[2][200]={{0}}, s10[2][200]={{0}}, s11[2][200]={{0}};
@@ -83,6 +103,11 @@ int main(int argc, char **argv) {
     exit(-1);
   }
   for (i=1; i<HIS_COUNT; i++) his[i] = his[i-1]+8192;
+  if ((his3[0] = calloc(1000*16384, sizeof(int))) == NULL) {
+    printf("ERROR in CTcal.c; cannot malloc his!\n");
+    exit(-1);
+  }
+  for (i=1; i<1000; i++) his3[i] = his3[i-1]+16384;
 
   // see if channel and energy limits are defined in the command line
   // chi=100+runInfo.nGe-1;   // runInfo.nGe not yet set! See later.
@@ -308,6 +333,13 @@ int main(int argc, char **argv) {
           //his[2000+chan][(int) (2.0*(e_qdtc + e_lamda - 2.0*1307.25) + 0.5)]++;
           his[2000+chan][(int) (2.0*(e_qdtc + e_qlc - 2.0*1307.25) + 0.5)]++;
         }
+        if (e_qdtc > 20 && e_qdtc < 2750 && e_qlc > 20 && e_qlc < 2750) {
+          his3[    chan][(int) (4.0*(e_ctc)           + 0.5)]++;
+          his3[200+chan][(int) (4.0*(e_lamda)         + 0.5)]++;
+          his3[400+chan][(int) (2.0*(e_ctc + e_lamda) + 0.5)]++;
+          his3[600+chan][(int) (4.0*(e_qdtc)          + 0.5)]++;
+          his3[800+chan][(int) (2.0*(e_qdtc + e_qlc)  + 0.5)]++;
+        }
       }
       // make file for 2D plots  of E vs CTC
       // roi_elo = DEP_E - 40.0;
@@ -403,7 +435,7 @@ int main(int argc, char **argv) {
           fwhm = 3;
           j = 1700;
         }
-        if ((pos = autopeak3(his[600+chan], j, 7000, &area, &fwhm))) {
+        if ((pos = autopeak3(his[600+chan], j, 8000, &area, &fwhm))) {
           fwhm0 = fwhm;
           if (chan < 100) {
             e_qdtc_gain[chan] = Dets[chan].HGcalib[2] = CAL_E/pos;
@@ -425,7 +457,7 @@ int main(int argc, char **argv) {
           fwhm = 3;
           j = 1700;
         }
-        if ((pos = autopeak3(his[800+chan], j, 7000, &area, &fwhm))) {
+        if ((pos = autopeak3(his[800+chan], j, 8000, &area, &fwhm))) {
           if (fwhm < fwhm0 * FWHM_RATIO) best_qdt_ql[chan] = 1;
           if (chan < 100) {
             e_qlc_gain[chan] = Dets[chan].HGcalib[3] = CAL_E/pos;
@@ -487,6 +519,24 @@ int main(int argc, char **argv) {
       sprintf(spname, "%d; ch %d mean quad corrected energy [0.25 keV]", i, i%200);
     }
     write_his(his[i], 8192, i, spname, f_out);
+  }
+  fclose(f_out);
+  
+  f_out = fopen("ctc3.rms", "w");
+  for (i=0; i<1000; i++) {
+   char spname[256];
+    if (i < 200) {
+      sprintf(spname, "%d; ch %d DT-corrected energy [0.25 keV]", i, i);
+    } else if (i < 400) {
+      sprintf(spname, "%d; ch %d lamda-corrected energy [0.25 keV]", i, i%200);
+    } else if (i < 600) {
+      sprintf(spname, "%d; ch %d mean linear corrected energy [0.25 keV]", i, i%200);
+    } else if (i < 800) {
+      sprintf(spname, "%d; ch %d QDT-corrected energy [0.25 keV]", i, i%200);
+    } else {
+      sprintf(spname, "%d; ch %d mean quad corrected energy [0.25 keV]", i, i%200);
+    }
+    write_his(his3[i], 16384, i, spname, f_out);
   }
   fclose(f_out);
   

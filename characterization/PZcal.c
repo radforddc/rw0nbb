@@ -407,7 +407,7 @@ void signalselect(FILE *f_in, MJDetInfo *Dets, MJRunInfo *runInfo, int step) {
       /* histogram mean baseline value (for new PZ.output) */
       if (PZI.baseline[chan] == -9999) {  // baselines unknown! use this first signal from chan as estimate.
         PZI.baseline[chan] = s1;
-        printf("Using BL of first signal (%.0f) as BL guess\n", s1);
+        printf("Using BL of first signal (%5.0f) as BL guess for channel %3d\n", s1, chan);
       }
       bl = s1 + 1000.5 - PZI.baseline[chan];
       if (bl > 0 && bl < 1900) his[chan][bl]++;
@@ -528,18 +528,20 @@ void signalselect(FILE *f_in, MJDetInfo *Dets, MJRunInfo *runInfo, int step) {
 
     printf("%3d %5.0f ;  %6.2f %9.5f  -> ",
            chan, PZI.baseline[chan], PZI.tau[chan], 1.0/PZI.tau[chan]);
-    fwhm = 5;
-    // integrate over +- 1.0 FWHM
-    if ((pos = autopeak4(his[chan], 2010, 3500, 1.0f, &area, &fwhm)) && area > 100)
-      PZI.tau[chan] = 30000.0 / (pos-2000.0);
-    // Use mode of distribution instead?
+    /* first find mode of tau distribution */
     j = 2010;
-    for (i=2011; i<3500; i++)
+    for (i=2011; i<3500; i++) {
       if (his[chan][j] < his[chan][i]) j = i;  // mode of tau distribution
-    if (his[chan][j] > 200) {
-      // PZI.tau[chan] = 30000.0 / (j-2000.0);
-
-      printf(" %6.2f %9.5f ;  %8.5f -> ", PZI.tau[chan], 1.0/PZI.tau[chan], PZI.frac2[chan]);
+    }
+    if (his[chan][j] > 100) {
+      PZI.tau[chan] = 30000.0 / (j-2000.0);
+      fwhm = 5;
+      // now integrate over +- 1.5 FWHM
+      if ((pos = autopeak4(his[chan], j-20, j+20, 1.5f, &area, &fwhm)) && area > 100) {
+	PZI.tau[chan] = 30000.0 / (pos-2000.0);
+      }
+      // if (chan <= 50) printf("\n chan %d area pos fwhm = %f %f %f  j = %d %d\n", chan, area, pos, fwhm, j, his[chan][j]);
+      printf(" %6.2f %9.5f ;  %4d %.2f %.2f ; %8.5f -> ", PZI.tau[chan], 1.0/PZI.tau[chan], j, pos, fwhm, PZI.frac2[chan]);
     } else {
       printf("\n");
       continue;

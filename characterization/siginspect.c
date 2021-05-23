@@ -464,7 +464,7 @@ void signalselect(FILE *f_in, MJDetInfo *Dets, MJRunInfo *runInfo) {
         } else {
           aovere = 0;
           if (e_raw > 1000)
-            printf("Eror getting A/E: chan %d   e_raw, e_ctc = %.0f, %.0f  t0 = %d\n", chan, e_raw, e_ctc, t0);
+            printf("Error getting A/E: chan %d   e_raw, e_ctc = %.0f, %.0f  t0 = %d\n", chan, e_raw, e_ctc, t0);
         }
         /* ---- This next section calculates the GERDA-style A/E ---- */
         if (PSA.gerda_aoe[chan]) {

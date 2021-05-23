@@ -62,7 +62,6 @@ int eventprocess(MJDetInfo *Dets, MJRunInfo *runInfo, int nChData, BdEvent *ChDa
   int     e_onbd, e_offline, e_trapmax, de;
   int     dirty_sig = 0, granularity;  // data cleaning result
   double  s1, s2;
-  float   ae_cut;
   long long int  time;
   unsigned short *head2;
   short          *signal;
@@ -694,6 +693,7 @@ int eventprocess(MJDetInfo *Dets, MJRunInfo *runInfo, int nChData, BdEvent *ChDa
        *      presort, and deadtime) so it is included only by defining the flag DO_PSA
        */
 
+      float  ae_cut;
       double e_raw, e_adc, e_ctc, e_lamda, gain;
       float  fsignal[8192], drift, aovere, dcr, lamda, lq;
       int    t0, t80, t95, t100, ebin;

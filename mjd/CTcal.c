@@ -11,7 +11,38 @@
 #define HIS_COUNT 2200  // number of spectra in his[][] array
 #define FWHM_RATIO 0.95 // ratio of FWHM to decide between E_dt and E_lamda charge-trapping correction
 
-/*  ------------------------------------------------------------ */
+
+/* -------------------------------------------------------------------
+
+ctc.rms:
+Sp ID        n:   detID n,  raw uncorrected energy [ADC]
+Sp ID  200 + n:   detID n,  Energy DT-corrected with test factors
+Sp ID  400 + n:   detID n,  Energy lamda-corrected with test factors
+Sp ID  600 + n:   detID n,  DT-corrected energy [ADC]
+Sp ID  800 + n:   detID n,  lamda-corrected energy [ADC]
+Sp ID 1000 + n:   detID n,  DT-corrected energy [0.5 keV]
+Sp ID 1200 + n:   detID n,  lamda-corrected energy [0.5 keV]
+Sp ID 1400 + n:   detID n,  optimally corrected energy [0.5 keV]
+Sp ID 1600 + n:   detID n,  drift time, misc
+Sp ID 1800 + n:   detID n,  raw (non-DT-corrected) energy [0.5 keV]
+Sp ID 2000 + n:   detID n,  optimally corrected energy [0.25 keV]
+ctc2.rms:
+Sp ID        n:   detID n,  DT-corrected energy [0.5 keV]
+Sp ID  200 + n:   detID n,  lamda-corrected energy [0.5 keV]
+Sp ID  400 + n:   detID n,  mean linear corrected energy [0.5 keV]
+Sp ID  600 + n:   detID n,  QDT-corrected energy [ADC]
+Sp ID  800 + n:   detID n,  QL-corrected energy [ADC]
+Sp ID 1000 + n:   detID n,  QDT-corrected energy [0.5 keV]
+Sp ID 1200 + n:   detID n,  QL-corrected energy [0.5 keV]
+Sp ID 1400 + n:   detID n,  mean quad corrected energy [0.5 keV]
+Sp ID 1600 + n:   detID n,  QDT-corrected energy [0.25 keV]
+Sp ID 1800 + n:   detID n,  QL-corrected energy [0.25 keV]
+Sp ID 2000 + n:   detID n,  mean quad corrected energy [0.25 keV]
+
+The detID is  0-57 for high gain channels, 100-157 for low gain.
+
+   ------------------------------------------------------------------- */
+
 
 int main(int argc, char **argv) {
 
@@ -275,7 +306,7 @@ int main(int argc, char **argv) {
           fwhm = 8;
           j = 1700;
         }
-        if ((pos = autopeak3(his[i], j, 7000, &area, &fwhm))) {
+        if ((pos = autopeak3(his[i], j, 8000, &area, &fwhm))) {
           if (i < 100) {
             Dets[i].HGcalib[0] = CAL_E/pos;
             printf(" E_raw %.1f: %3d P = %7.1f A = %7.0f; FWHM = %7.2f keV\n",
@@ -340,7 +371,7 @@ int main(int argc, char **argv) {
           fwhm = 3;
           j = 1700;
         }
-        if ((pos = autopeak3(his[600+chan], j, 7000, &area, &fwhm))) {
+        if ((pos = autopeak3(his[600+chan], j, 8000, &area, &fwhm))) {
           fwhm0 = fwhm;
           if (chan < 100) {
             Dets[chan].HGcalib[0] = CAL_E/pos;
@@ -362,7 +393,7 @@ int main(int argc, char **argv) {
           fwhm = 3;
           j = 1700;
         }
-        if ((pos = autopeak3(his[800+chan], j, 7000, &area, &fwhm))) {
+        if ((pos = autopeak3(his[800+chan], j, 8000, &area, &fwhm))) {
           if (fwhm < fwhm0 * FWHM_RATIO) CTC.best_dt_lamda[chan] = 1;
           if (chan < 100) {
             CTC.e_lamda_gain[chan] = CAL_E/pos/Dets[chan].HGcalib[0];

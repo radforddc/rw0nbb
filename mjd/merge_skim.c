@@ -56,7 +56,23 @@ int main(int argc, char **argv) {
       printf("\n ERROR: No charge-trapping correction data read. Does %s exist?\n", CTC.ctc_fname);
       exit(-1);
     }
+
+    // read detector and run info from the saved skim data, from f_in
+    fread(&nsd, sizeof(int), 1, f_in);
+    if (nsd == -2) {
+      sd_version = 2;
+      fread(&nsd, sizeof(int), 1, f_in);
+    }
+    fread(&Dets[0], sizeof(Dets[0]), NMJDETS, f_in);  // NOTE that this overwrites energy calibs
+    fread(&runInfo, sizeof(runInfo) - 8*sizeof(int), 1, f_in);
+    if (runInfo.idNum == 0) {
+      runInfo.flashcam = 1;
+      fread(&(runInfo.flashcam), 8*sizeof(int), 1, f_in);
+    }
+
     /* read energy calibration gains corresponding to new skim file */
+    /* this part must be done after reading detector info from skim.dat,
+       since that would override these calibs. */
     sprintf(line, "%s/gains.input", ds_fname);
     if ((fp = fopen(line, "r"))) {
       printf("\n Reading energy calibrations from %s, argn = %d\n", line, argn);
@@ -109,18 +125,6 @@ int main(int argc, char **argv) {
     printf("Reading skim file %s\n", argv[argn]);
 
     // read saved skim data from f_in
-    fread(&nsd, sizeof(int), 1, f_in);
-    if (nsd == -2) {
-      sd_version = 2;
-      fread(&nsd, sizeof(int), 1, f_in);
-    }
-    fread(&Dets[0], sizeof(Dets[0]), NMJDETS, f_in);
-    fread(&runInfo, sizeof(runInfo) - 8*sizeof(int), 1, f_in);
-    if (runInfo.idNum == 0) {
-      runInfo.flashcam = 1;
-      fread(&(runInfo.flashcam), 8*sizeof(int), 1, f_in);
-    }
-
     printf("Skim data mode = %d;  %d detectors, %d skimmed events\n",
            sd_version, runInfo.nGe, nsd);
     if (sd_version == 1) {
@@ -148,10 +152,10 @@ int main(int argc, char **argv) {
     }
     printf(" Skim is data from runs starting at number %d from file %s\n"
            "  Total events now %d\n",
-           runInfo.runNumber, runInfo.filename, numsd);
+           runInfo.runNumber, runInfo.filename, numsd); 
 
     if (argn > 0) {
-      printf("Adjusting E values by differences in gains\n");
+      printf("Adjusting E values by differences in gains (e.g. ID 1 %f -> %f\n", calib[1], Dets[1].HGcalib[0]);
       for (i = nsd_start; i < numsd; i++) {
         if ((j = sd[i]->chan) >= 0 && j < 100 && calib[j] > 0.1) sd[i]->e *= Dets[j].HGcalib[0] / calib[j];
         if (              j >= 100 && j < 200 && calib[j] > 0.1) sd[i]->e *= Dets[j-100].LGcalib[0] / calib[j];
@@ -181,6 +185,10 @@ int main(int argc, char **argv) {
   i = -2;
   fwrite(&i, sizeof(int), 1, f_out);    // flag to tell reading programs to use SavedData2 instead of SavedData
   fwrite(&numsd, sizeof(int), 1, f_out);
+  for (i = 0; i < 100; i++) { // replace energy calibrations with those from the first merged skim
+    if (calib[i] != 0)     Dets[i].HGcalib[0] = calib[i];
+    if (calib[i+100] != 0) Dets[i].LGcalib[0] = calib[i+100];
+  }
   fwrite(&Dets[0], sizeof(Dets[0]), NMJDETS, f_out);
   if (runInfo.flashcam) {
     runInfo.idNum = 0;

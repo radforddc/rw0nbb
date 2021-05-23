@@ -883,7 +883,7 @@ double get_CTC_energy(float *fsignal, int len, int chan, MJDetInfo *Dets, PSAinf
   /* check t0 lower limit to make sure we have enough signal baseline to calculate the fixed trap */
   if (*t0 < PSA->e_ctc_rise[chan] - 31) return -1.0f;
   /* check t0 upper limit to make sure we have enough remaining signal to calculate the fixed trap */
-  if (*t0 + PSA->e_ctc_rise[chan] + PSA->e_ctc_flat[chan - 10] >= len) return -1.0f;
+  if (*t0 + PSA->e_ctc_rise[chan] + PSA->e_ctc_flat[chan] - 10 >= len) return -1.0f;
 
   /* get new energy estimation based on *fixed* trap */
   *e_raw = float_trap_fixed(fsignal, *t0 - PSA->e_ctc_rise[chan] - 10,
@@ -1635,12 +1635,14 @@ float autopeak4(int *his, int lo, int hi, float input_width, float *area, float 
   }
   lo = pos - 1.5 * input_width * *fwhm;  // factor of 1.5 is dropped below
   hi = pos + 1.5 * input_width * *fwhm;
+  // printf("\n >>>>>> ap4:  lo, hi = %d %d\n", lo, hi);
 
   // now do search using iterative integration
   for (j=0; j<10; j++) {
     //printf(" > j, lo, hi, fwhm: %d %d %d %f\n", j, lo, hi, *fwhm);
     if ((pos = autopeak3a(his, lo, hi, area, fwhm)) < 1) return 0.0;
     if (*fwhm == fwhm0) return pos;
+    if (*fwhm < 1.0) *fwhm = 1.0;
     fwhm0 = *fwhm;
     lo = pos - input_width * *fwhm + 0.5;
     hi = pos + input_width * *fwhm + 0.5;

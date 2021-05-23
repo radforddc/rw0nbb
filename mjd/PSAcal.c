@@ -141,8 +141,8 @@ int main(int argc, char **argv) {
     exit(-1);
   }
 
-  /* read PZ orrection info */
-  if (!PZ_info_read(&runInfo, &PZI)) {
+  /* read PZ correction info */
+  if (AOE_CORRECT_NOISE && !PZ_info_read(&runInfo, &PZI)) {
     printf("\n ERROR: No initial pole-zero data read. Does PZ.input exist?\n");
     exit(-1);
   }

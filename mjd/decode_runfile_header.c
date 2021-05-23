@@ -675,6 +675,7 @@ int decode_runfile_header(FILE *f_in, MJDetInfo *DetsReturn, MJRunInfo *runInfo)
         if (10 != read_int_array(f_in, &GeDig[nGeDig].Prerecnt[0], 10, line)) return -1;
         if (strstr(line, "<key>Serial Number</key>")) {
           if (read_int(f_in, &GeDig[nGeDig].SerialNumber, line)) return -1;
+          // printf("Digitizer %d has Serial Number %d\n", nGeDig, GeDig[nGeDig].SerialNumber);
           //discard(f_in, 2, line,  "<key>Serial Number</key>");
         }
         CHECK_FOR_STRING("<key>TPol</key>");
@@ -1174,7 +1175,7 @@ int decode_runfile_header(FILE *f_in, MJDetInfo *DetsReturn, MJRunInfo *runInfo)
       }
       /* ---------- */
 
-      printf(" Error: Controller card %d has no matching pulser tag!\n", j);
+      printf(" Warning: Controller card %d has no matching pulser tag!\n", j);
     }
   }
     

@@ -62,7 +62,8 @@ int main(int argc, char **argv) {
     return 0;
   }
   while ((de = readdir(dp)) != NULL) {
-    if (strstr(de->d_name, "ds")) strncpy(calib_subset_dir[nc++], de->d_name, sizeof(calib_subset_dir[0]));
+    if (strstr(de->d_name, "ds") == de->d_name)
+      strncpy(calib_subset_dir[nc++], de->d_name, sizeof(calib_subset_dir[0]));
   }
   closedir(dp);
 
@@ -288,14 +289,15 @@ int main(int argc, char **argv) {
       PSA.ae_cut[i]    += da / 2.0;
       PSA.dcr_lim[i]   += dd / 2.0;
       PSA.lamda_lim[i] += dl / 2.0;
-      PSA.lq_lim[i]    += dq / 2.0; // take the mean LQ cut value
+      // PSA.lq_lim[i]    += dq / 2.0; // take the mean LQ cut value
+      PSA.lq_lim[i]     = fmax(PSA2.lq_lim[i], PSA1.lq_lim[i]); // take the higher LQ cut value
       if (!take_mean) {
         // adjust mean to prioritize either acceptance or background rejection
         double factor = 0.5;  // fudge factor for how quickly the mean is adjusted; range should be 0.5 - 1.0
         PSA.ae_cut[i]    += opt_bkgnd * da * erf(factor * da / ea) / 2.0;
         PSA.dcr_lim[i]   -= opt_bkgnd * dd * erf(factor * dd / ed) / 2.0;
         PSA.lamda_lim[i] -= opt_bkgnd * dl * erf(factor * dl / el) / 2.0;
-        PSA.lq_lim[i]    -= opt_bkgnd * dq * erf(factor * dq / eq) / 2.0;
+        // PSA.lq_lim[i]    -= opt_bkgnd * dq * erf(factor * dq / eq) / 2.0;
       }
       //instead of mean or acceptance/bgnd, do linear time-interpolation of A/E cut value
       PSA.ae_cut[i]     = PSA1.ae_cut[i];
@@ -342,12 +344,14 @@ int main(int argc, char **argv) {
           veto_str[veto++] = 'D';
         }
         // LQ
+        /*  do not treat large changes in LQ as a problem, since LQ rejection is so rare. Just take max LQ cut.
         if (fabs(dq) > 4.0*eq) {             // ~ 4σ for LQ
           printf("%s LQ   change!  %6.2f  > %4.2f\n", line, PSA1.lq_lim[i] - PSA2.lq_lim[i], 2.0*5.0/2.355);
           n_veto[i][4]++;
           if (veto==1) n_veto[i][6]++;  // multiple reasons
           veto_str[veto++] = 'Q';
         }
+        */
         // PZ tau
         if (fabs(PZI1.tau[i] - PZI2.tau[i]) > 2.0*0.4/2.355) {        // ~ 2σ for tau
           printf("%s tau  change!  %6.2f  > %4.2f\n", line, PZI1.tau[i] - PZI2.tau[i], 1.0*0.4/2.355);
