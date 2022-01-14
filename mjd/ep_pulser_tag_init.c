@@ -93,10 +93,18 @@ int eventprocess(MJDetInfo *Dets, MJRunInfo *runInfo, int nChData, BdEvent *ChDa
       // pos2[i] = area2[i] = fwhm2[i] = 0.0;
       pulser_period[i] = Dets[0].pulseHighTime + Dets[0].pulseLowTime;  // default
     }
-    for (i=1; i<runInfo->nGe; i++) {
-      pulser_period[i] = pulser_period[i + 100] =
-        Dets[i].pulseHighTime + Dets[i].pulseLowTime;
-      pulser_period[Dets[i].CCnum+80] = pulser_period[i];  // common CC channels
+    if (DS0) {
+      for (i=1; i<runInfo->nGe; i++) {
+	pulser_period[i] = pulser_period[i + 100] = 262143/2;
+	if (i==3 || i==17 || i>24) pulser_period[i] = pulser_period[i + 100] = 131076/2;
+	pulser_period[Dets[i].CCnum+80] = pulser_period[i];  // common CC channels
+      }
+    } else {
+      for (i=1; i<runInfo->nGe; i++) {
+	pulser_period[i] = pulser_period[i + 100] =
+	  Dets[i].pulseHighTime + Dets[i].pulseLowTime;
+	pulser_period[Dets[i].CCnum+80] = pulser_period[i];  // common CC channels
+      }
     }
     for (i=1; i<400; i++)
       his[i] = his[i-1]+8192;

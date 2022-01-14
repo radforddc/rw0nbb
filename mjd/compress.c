@@ -144,6 +144,10 @@ int eventprescan(FILE *f_in, FILE *ps_f_out, MJDetInfo *Dets, MJRunInfo *runInfo
     }
 
     /* --------------- Gretina4M digitizer ---------------- */
+    if (DS0 && evlen > 2000) {
+      printf(" ----- Discarding event with length (%d) too big\n", evlen);
+      continue;
+    }
     if (evlen != 1026) {
       printf("\n -------- ERROR: record length (%d) is not 1026!\n"
              " -------- Is this compressed data??\n", evlen);

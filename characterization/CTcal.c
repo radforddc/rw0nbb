@@ -302,6 +302,7 @@ int main(int argc, char **argv) {
         if (i%100 == 0) printf("\n");
         fwhm = 20;
         j = 4000;
+        if (runInfo.flashcam == 3) j = 3000;  // HADES data has lower effective gain
         if (i > 99) {
           fwhm = 8;
           j = 1700;
@@ -367,6 +368,7 @@ int main(int argc, char **argv) {
         // first for E_ctc
         fwhm = 5;
         j = 4000;
+        if (runInfo.flashcam == 3) j = 3000;  // HADES data has lower effective gain
         if (chan > 99) {
           fwhm = 3;
           j = 1700;
@@ -389,6 +391,7 @@ int main(int argc, char **argv) {
         // now for E_lamda
         fwhm = 5;
         j = 4000;
+        if (runInfo.flashcam == 3) j = 3000;  // HADES data has lower effective gain
         if (chan > 99) {
           fwhm = 3;
           j = 1700;

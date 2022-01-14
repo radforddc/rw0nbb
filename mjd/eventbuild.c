@@ -98,7 +98,7 @@ int flush_buffers(MJDetInfo *Dets, MJRunInfo *runInfo, BdEvent *modBuf[NBDS], in
     if (n != *nBdsAvail) {
       printf("\nAckk! In flush_buffers(), n = %d != nBdsAvail = %d !\n\n",
              n, *nBdsAvail);
-      return -1;
+      return -1;     // return with error
     }
     min_time = modBuf[order[0]][iptr[order[0]]].time;  // earliest time in all module buffers
 
@@ -122,7 +122,7 @@ int flush_buffers(MJDetInfo *Dets, MJRunInfo *runInfo, BdEvent *modBuf[NBDS], in
           for (k=0; k<200; k+=4)
             printf("%12lld %12lld %12lld %12lld\n", ChData[k]->time,
                    ChData[k+1]->time, ChData[k+2]->time, ChData[k+3]->time);
-          //return -1;
+          //return -1;     // return with error
           break;
         }
         (*out_evts)++;
@@ -164,7 +164,7 @@ int flush_buffers(MJDetInfo *Dets, MJRunInfo *runInfo, BdEvent *modBuf[NBDS], in
 #endif
 
     //printf("ep_in\n"); fflush(stdout);
-    if ((k = eventprocess(Dets, runInfo, nChData, ChData)) < 0) return k;
+    if ((k = eventprocess(Dets, runInfo, nChData, ChData)) < 0) return k;     // return with error
     //printf("ep_out\n"); fflush(stdout);
 #ifdef PRESORT
     if (k < 1) {    // good event, not a pulser; can be dirty
@@ -188,7 +188,7 @@ int flush_buffers(MJDetInfo *Dets, MJRunInfo *runInfo, BdEvent *modBuf[NBDS], in
   }
   printf("Flushing finished...\n"); // fflush(stdout);
 
-  return 0;
+  return 0;     // normal return
 }
 
 /*  ------------------------------------------------------------ */
@@ -247,7 +247,7 @@ int eventbuild(FILE *f_in, MJDetInfo *Dets, MJRunInfo *runInfo) {
     if (flush_buffers(Dets, runInfo, modBuf, nModBuf, nevts, iptr, order,
                       &nBdsAvail, &out_evts, &built_evts, ps_f_out,
                       &badevts, his, lastBuiltTime) < 0)
-      return -1;
+      return -1;     // return with error
 
     /* change filename stored in runInfo for the benefit of ep_finalize and plot titles, etc */
     /* sprintf(runInfo->filename, "DS%d (runs %d to %d)",
@@ -263,7 +263,7 @@ int eventbuild(FILE *f_in, MJDetInfo *Dets, MJRunInfo *runInfo) {
 #else
   /* some versions of the event builder allow for a special call
      to trigger end-of-run cleanup; this isn't one of them, so ignore */
-  if (runInfo->analysisPass < 0) return 0;
+  if (runInfo->analysisPass < 0) return 0;    // normal return
   //return eventprocess(Dets, runInfo, -99, ChData);
 #endif
   
@@ -304,16 +304,16 @@ int eventbuild(FILE *f_in, MJDetInfo *Dets, MJRunInfo *runInfo) {
   }
 
   /* initialize some values */
-  if ((nmod = ep_init(Dets, runInfo, module_lu, det_lu, chan_lu)) < 0) return -1;
+  if ((nmod = ep_init(Dets, runInfo, module_lu, det_lu, chan_lu)) < 0) return -1;     // return with error
 #ifdef PRESORT
   if (nModBuf > 0 && nmod+1 != nModBuf) {
     fprintf(stderr, "ERROR: Number of VME boards has changed from %d to %d!\n\n", nModBuf, nmod+1);
-    return -1;
+    return -1;     // return with error
   }
 #else
   if (nModBuf > 0 && nmod != nModBuf) {
     fprintf(stderr, "ERROR: Number of VME boards has changed from %d to %d!\n\n", nModBuf, nmod);
-    return -1;
+    return -1;     // return with error
   }
 #endif
 
@@ -407,7 +407,7 @@ int eventbuild(FILE *f_in, MJDetInfo *Dets, MJRunInfo *runInfo) {
         /* malloc space to the corresponding module event buffer */
         if (!(modBuf[nModBuf++] = malloc(NEVTS * sizeof(BdEvent)))) {
           printf("Malloc failed for modBuf[%d][%d]\n\n", nModBuf-1, NEVTS);
-          return -1;
+          return -1;     // return with error
         }
         /* decide if there is presumming; if so, then we also need to
            malloc space for sigBuf, to hold expanded signals */
@@ -458,7 +458,7 @@ int eventbuild(FILE *f_in, MJDetInfo *Dets, MJRunInfo *runInfo) {
           for (j=0; j<NEVTS; j++) {
             if (!(sigBuf[nModBuf-1][j] = malloc(k * sizeof(short)))) {
               printf("Malloc failed for sigBuf[%d][%d]\n\n", nModBuf-1, j);
-              return -1;
+              return -1;     // return with error
             }
           }
         } else if (DEBUG && chan_k >= 0) {
@@ -476,27 +476,27 @@ int eventbuild(FILE *f_in, MJDetInfo *Dets, MJRunInfo *runInfo) {
         /* malloc space to the corresponding module event buffer */
         if (!(modBuf[nModBuf++] = malloc(NEVTS * sizeof(BdEvent)))) {
           fprintf(stderr, "Malloc failed for Veto modBuf[%d][%d]\n\n", nModBuf-1, NEVTS);
-          return -1;
+          return -1;     // return with error
         }
       }
       if (nModBuf > NBDS) {
         fprintf(stderr, "ERROR: Too many VME boards (%d)!\n\n", nModBuf);
-        return -1;
+        return -1;     // return with error
       } else if (nModBuf != nmod) {
         fprintf(stderr, "ERROR: Number of VME boards (%d) != result of ep_init (%d)\n\n",
                nModBuf, nmod);
-        return -1;
+        return -1;     // return with error
       }
     }
 #ifdef PRESORT
     /* malloc space to the rundecoder event buffer */
     if (!(modBuf[nModBuf++] = malloc(NEVTS * sizeof(BdEvent)))) {
       printf("Malloc failed for Run modBuf[%d][%d]\n\n", nModBuf-1, NEVTS);
-      return -1;
+      return -1;     // return with error
     }
     if (nModBuf > NBDS) {
       printf("ERROR: Too many VME boards (%d)!\n\n", nModBuf);
-      return -1;
+      return -1;     // return with error
     }
 #endif
 
@@ -630,7 +630,7 @@ int eventbuild(FILE *f_in, MJDetInfo *Dets, MJRunInfo *runInfo) {
           printf("Flushing buffers...\n");
           if (flush_buffers(Dets, runInfo, modBuf, nModBuf, nevts, iptr, order,
                             &nBdsAvail, &out_evts, &built_evts, ps_f_out,
-                            &badevts, his, lastBuiltTime) < 0) return -1;
+                            &badevts, his, lastBuiltTime) < 0) return -1;     // return with error
           min_time = -1;
           min_time_board = -1;
         }
@@ -687,6 +687,10 @@ int eventbuild(FILE *f_in, MJDetInfo *Dets, MJRunInfo *runInfo) {
       if (time > 0) oldTime  = time;
       time = (evtdat[3] & 0xffff);
       time = time << 32 | evtdat[2];
+      if (DS0 && evlen > 2000) {
+        printf(" ----- Discarding event with length (%d) too big; time %lld  out_evts %d\n", evlen, time, out_evts);
+        continue;
+      }
       if (t_offset[board]) {
         time += t_offset[board];
         evtdat[3] = (evtdat[3] & 0xffff0000) | ((time >> 32) & 0xffff);
@@ -849,7 +853,7 @@ int eventbuild(FILE *f_in, MJDetInfo *Dets, MJRunInfo *runInfo) {
                           &nBdsAvail, &out_evts, &built_evts,
 #endif
                           &badevts, his, lastBuiltTime) < 0)
-          return -1;
+          return -1;     // return with error
         min_time = oldTime = time;
         min_time_board = board;
         for (i=0; i<200; i++) last_ch_time[i] = 0;
@@ -1060,6 +1064,7 @@ int eventbuild(FILE *f_in, MJDetInfo *Dets, MJRunInfo *runInfo) {
     modBuf[board][j].evlen = evlen;
     modBuf[board][j].crate = crate;
     modBuf[board][j].slot  = slot;
+    modBuf[board][j].chan  = chan;
     modBuf[board][j].orca_type = board_type;
     modBuf[board][j].time = time;
     if (board_type == dataIdC830e ||
@@ -1097,7 +1102,7 @@ int eventbuild(FILE *f_in, MJDetInfo *Dets, MJRunInfo *runInfo) {
                         &nBdsAvail, &out_evts, &built_evts,
 #endif
                         &badevts, his, lastBuiltTime) < 0)
-        return -1;
+        return -1;     // return with error
       min_time = time;
       min_time_board = board;
     }
@@ -1141,7 +1146,7 @@ int eventbuild(FILE *f_in, MJDetInfo *Dets, MJRunInfo *runInfo) {
       if (n != nBdsAvail || n == 0) {
         printf("\nAckk! In eventbuild, n = %d != nBdsAvail = %d !\n\n",
                n, nBdsAvail);
-        return -1;
+        return -1;     // return with error
       }
       min_time = modBuf[order[0]][iptr[order[0]]].time;  // earliest time in all module buffers
       min_time_board = order[0];
@@ -1173,7 +1178,7 @@ int eventbuild(FILE *f_in, MJDetInfo *Dets, MJRunInfo *runInfo) {
             for (k=0; k<200; k+=4)
               printf("%12lld %12lld %12lld %12lld\n", ChData[k]->time,
                      ChData[k+1]->time, ChData[k+2]->time, ChData[k+3]->time);
-            //return -1;
+            //return -1;     // return with error
             break;
           }
           out_evts++;
@@ -1205,14 +1210,23 @@ int eventbuild(FILE *f_in, MJDetInfo *Dets, MJRunInfo *runInfo) {
       built_evts++;
 
 #ifdef EXCLUDE_GRAN
-    /* exclude granularity events even without processing them to save time and disk space */
-    if (checkGranularity(Dets, runInfo, nChData, ChData)) {
-      badevts++;
-      continue;
-    }
+      /* exclude granularity events even without processing them to save time and disk space */
+      if (checkGranularity(Dets, runInfo, nChData, ChData)) {
+        badevts++;
+        continue;
+      }
 #endif
 
-     if ((k = eventprocess(Dets, runInfo, nChData, ChData)) < 0) return k;
+      if (DS0 && ChData[0]->evlen > 2000) {
+        printf("\n ------------ Event %d, nChData = %d\n", out_evts, nChData);
+        for (k=0; k<nChData; k++) {
+          printf(" %d %d %d %d\n", k, ChData[k]->evlen, ChData[k]->crate, ChData[k]->slot);
+        }
+        printf(" ------------\n");
+        out_evts -= nChData;
+        continue;
+      }
+      if ((k = eventprocess(Dets, runInfo, nChData, ChData)) < 0) return k;     // return with error
 #ifdef PRESORT
       if (k < 1) {  // good event, not a pulser, but before data cleaning; i.e. can be dirty
         for (i = 0; i < nChData; i++) {
@@ -1235,7 +1249,6 @@ int eventbuild(FILE *f_in, MJDetInfo *Dets, MJRunInfo *runInfo) {
 #endif
     }
 
-    // if (totevts > 200) break;
     // FIXME - need to check for timestamp rollover?
 
   } /* +--+--+--+--+--+--+--+--+ END of reading events +--+--+--+--+--+--+--+--+ */
@@ -1251,7 +1264,7 @@ int eventbuild(FILE *f_in, MJDetInfo *Dets, MJRunInfo *runInfo) {
   if (flush_buffers(Dets, runInfo, modBuf, nModBuf, nevts, iptr, order,
                     &nBdsAvail, &out_evts, &built_evts,
                     &badevts, his, lastBuiltTime) < 0)
-    return -1;
+    return -1;     // return with error
 #endif
 
   printf("\n %d events in, %d events out, %d events built, %d * 3 veto events\n",
@@ -1297,7 +1310,7 @@ int eventbuild(FILE *f_in, MJDetInfo *Dets, MJRunInfo *runInfo) {
 #ifndef PRESORT
   /* special call to eventprocess() with nChData = -99 as flag
      to finish up processing, write out files, etc. */
-  if ((k = eventprocess(Dets, runInfo, -99, ChData)) < 0) return k;
+  if ((k = eventprocess(Dets, runInfo, -99, ChData)) < 0) return k;     // return with error
 #endif
 
 #ifdef PRESORT
@@ -1309,5 +1322,5 @@ int eventbuild(FILE *f_in, MJDetInfo *Dets, MJRunInfo *runInfo) {
     printf("\n@@@@@ Time stamps were out of order. This run %d requires prebuilding!\n",
            runInfo->runNumber);
 
-  return  out_evts;
+  return  out_evts;     // normal return
 } /* eventbuild() */

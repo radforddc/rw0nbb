@@ -128,6 +128,7 @@ void signalselect(FILE *f_in, MJDetInfo *Dets, MJRunInfo *runInfo, int step) {
              " >>>> Starting with first baseline seen for each channl as initial estimate.\n");
       for (chan = 0; chan < 200; chan++) {
         PZI.baseline[chan] = -9999;  // special flag to say that baseline is unknown
+        if (runInfo->flashcam == 3) PZI.tau[chan] = 29;  // HADES characterization data has different tau
       }
     }
 
@@ -384,10 +385,10 @@ void signalselect(FILE *f_in, MJDetInfo *Dets, MJRunInfo *runInfo, int step) {
     int e = trap_max(signal, &j, TRAP_RISE, TRAP_FLAT)/TRAP_RISE;
     if (runInfo->flashcam) e /= 2;
 
-    his[100][e]++;
+    // his[100][e]++;
     if (chan < 100 && (e < elo || e > ehi)) continue;
     if (chan > 99 && (e < elo/3.4 || e > ehi/3.2)) continue;
-    his[110][e]++;
+    // his[110][e]++;
     out_evts++;
 
 
@@ -541,7 +542,8 @@ void signalselect(FILE *f_in, MJDetInfo *Dets, MJRunInfo *runInfo, int step) {
 	PZI.tau[chan] = 30000.0 / (pos-2000.0);
       }
       // if (chan <= 50) printf("\n chan %d area pos fwhm = %f %f %f  j = %d %d\n", chan, area, pos, fwhm, j, his[chan][j]);
-      printf(" %6.2f %9.5f ;  %4d %.2f %.2f ; %8.5f -> ", PZI.tau[chan], 1.0/PZI.tau[chan], j, pos, fwhm, PZI.frac2[chan]);
+      // printf(" %6.2f %9.5f ;  %4d %.2f %.2f ; %8.5f -> ", PZI.tau[chan], 1.0/PZI.tau[chan], j, pos, fwhm, PZI.frac2[chan]);
+      printf(" %6.2f %9.5f ; %8.5f -> ", PZI.tau[chan], 1.0/PZI.tau[chan], PZI.frac2[chan]);
     } else {
       printf("\n");
       continue;

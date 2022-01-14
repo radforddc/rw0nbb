@@ -259,6 +259,15 @@ int decode_runfile_header(FILE *f_in, MJDetInfo *DetsReturn, MJRunInfo *runInfo)
     runInfo->flashcam = 2;
     reclen = reclen2 = 0;
     runInfo->fileHeaderLen = 0;
+  } else if (strstr(runInfo->filename, ".hades")) { // presorted HADES data, no header
+    runInfo->flashcam = 3;
+    reclen = reclen2 = 0;
+    runInfo->fileHeaderLen = 4;
+    fread(buf, 16, 1, f_in);
+    if (!strstr((char *)buf, "HADES_hdf2dat")) {
+      printf("ERROR: File %s does not start with HADES_hdf2dat\n", runInfo->filename);
+      return 0;
+    }
   } else {
     /* read unformatted data and plist at start of orca file */
     fread(buf, sizeof(buf), 1, f_in);
@@ -421,7 +430,10 @@ int decode_runfile_header(FILE *f_in, MJDetInfo *DetsReturn, MJRunInfo *runInfo)
                           &MJMStrs[nMJStrs].Det[1], &MJMStrs[nMJStrs].Det[2],
                           &MJMStrs[nMJStrs].Det[3], &MJMStrs[nMJStrs].Det[4])) {
             fprintf(stderr, "\n ERROR decoding StringGeometry:\n %s\n", line);
-            return -1;
+            // DCR Aug 2021 // return -1;
+	    fgets(line, sizeof(line), f_in);
+	    continue;
+            // DCR Aug 2021 //
           }
 
           if (VERBOSE) {  // report results
@@ -676,7 +688,7 @@ int decode_runfile_header(FILE *f_in, MJDetInfo *DetsReturn, MJRunInfo *runInfo)
         if (strstr(line, "<key>Serial Number</key>")) {
           if (read_int(f_in, &GeDig[nGeDig].SerialNumber, line)) return -1;
           // printf("Digitizer %d has Serial Number %d\n", nGeDig, GeDig[nGeDig].SerialNumber);
-          //discard(f_in, 2, line,  "<key>Serial Number</key>");
+          // discard(f_in, 2, line,  "<key>Serial Number</key>");
         }
         CHECK_FOR_STRING("<key>TPol</key>");
         if (10 != read_int_array(f_in, &GeDig[nGeDig].TrigPolarity[0], 10, line)) return -1;

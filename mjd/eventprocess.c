@@ -62,6 +62,7 @@ int eventprocess(MJDetInfo *Dets, MJRunInfo *runInfo, int nChData, BdEvent *ChDa
   int     e_onbd, e_offline, e_trapmax, de;
   int     dirty_sig = 0, granularity;  // data cleaning result
   double  s1, s2;
+  float   ae_cut;
   long long int  time;
   unsigned short *head2;
   short          *signal;
@@ -367,9 +368,13 @@ int eventprocess(MJDetInfo *Dets, MJRunInfo *runInfo, int nChData, BdEvent *ChDa
                badevts_bytype[i], i, bad_evt_type[i]);
     }
 
+    /*  These next two lines are commented out since they cause a segfault 
+        when some of the codes are run on more than one input event file.
+        It's ugly but there's no other easy solution.
     if (f_out) {fclose(f_out); f_out = 0;}
     if (bf_out) {fclose(bf_out); bf_out = 0;}
-    
+    */
+
     int ret_value = ep_finalize(Dets, runInfo, his, on_bd_rise, totevts, &ptInfo, &dcInfo);
 
 #ifdef DO_PSA
@@ -693,7 +698,6 @@ int eventprocess(MJDetInfo *Dets, MJRunInfo *runInfo, int nChData, BdEvent *ChDa
        *      presort, and deadtime) so it is included only by defining the flag DO_PSA
        */
 
-      float  ae_cut;
       double e_raw, e_adc, e_ctc, e_lamda, gain;
       float  fsignal[8192], drift, aovere, dcr, lamda, lq;
       int    t0, t80, t95, t100, ebin;

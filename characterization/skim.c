@@ -269,6 +269,11 @@ int main(int argc, char **argv) {
         if (i != j) {
           sig_len = decompress_signal((unsigned short *)siguc, sigu, i);
           signal = sigu;
+          if (runInfo.flashcam == 3) { // HADES data; extra-long signal
+            signal = sigu + 500;
+            sig_len -= 500;
+            j -= 500;
+          }
         }
         if (j != sig_len) {
           printf("\nERROR decompressing signal; sig_len %d != %d\n", sig_len, j);
@@ -477,7 +482,8 @@ int main(int argc, char **argv) {
     if (elo == 3000 && (E_THRESH > 0 && e_ctc < E_THRESH)) continue;
 
     /* find A/E */
-    if (e_ctc > 50 && t0 > 200 && t0 < 1500) {
+    if (e_ctc > 50 && t0 > 200 &&
+        ((runInfo.flashcam < 3 && t0 < 1500) || (runInfo.flashcam == 3 && t0 < 2500))) {
       float s2 = float_trap_max_range(fsignal, &tmax, PSA.a_e_rise[chan], 0, t0-20, t0+300); // FIXME: hardwired range??
       aovere = s2 * PSA.a_e_factor[chan] / e_raw;
       /* do quadratic fit/interpolation over +- one sample, to improve max A/E determination

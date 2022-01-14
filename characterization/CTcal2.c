@@ -431,6 +431,7 @@ int main(int argc, char **argv) {
         // first for E_qdtc
         fwhm = 5;
         j = 4000;
+        if (runInfo.flashcam == 3) j = 3000;  // HADES data has lower effective gain
         if (chan > 99) {
           fwhm = 3;
           j = 1700;
@@ -453,6 +454,7 @@ int main(int argc, char **argv) {
         // now for E_qlc
         fwhm = 5;
         j = 4000;
+        if (runInfo.flashcam == 3) j = 3000;  // HADES data has lower effective gain
         if (chan > 99) {
           fwhm = 3;
           j = 1700;

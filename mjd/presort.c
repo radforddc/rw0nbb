@@ -80,7 +80,6 @@ int main(int argc, char **argv) {
              detInfo[i].DigSerialNum,    detInfo[i].DigSerialNum);
     }
 #endif
-    return 1;
 
     printf("\n# PT_ID  Dig\n");
     for (i=0; i<runInfo.nPT; i++) {
