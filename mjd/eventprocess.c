@@ -62,7 +62,6 @@ int eventprocess(MJDetInfo *Dets, MJRunInfo *runInfo, int nChData, BdEvent *ChDa
   int     e_onbd, e_offline, e_trapmax, de;
   int     dirty_sig = 0, granularity;  // data cleaning result
   double  s1, s2;
-  float   ae_cut;
   long long int  time;
   unsigned short *head2;
   short          *signal;
@@ -80,6 +79,7 @@ int eventprocess(MJDetInfo *Dets, MJRunInfo *runInfo, int nChData, BdEvent *ChDa
   static PTag      ptInfo, pt2;         // pulser energy and delta-time info for tagging
   static DataClean dcInfo;              // data-cleaning info/limits
 #ifdef DO_PSA
+  float  ae_cut;
   static PZinfo PZI;                    // pole-zero info
   static CTCinfo CTC;                   // charge-trapping correction info
   static PSAinfo PSA;                   // pulse-shape analysis info and limits
@@ -864,7 +864,7 @@ int eventprocess(MJDetInfo *Dets, MJRunInfo *runInfo, int nChData, BdEvent *ChDa
       a_e_good = a_e_high = 0;
       ae_cut = PSA.ae_cut[chan];
       if (PSA.ae_t0[chan]) {
-        /* adjust cut value by linear time-interpolation between enighboring calibrations
+        /* adjust cut value by linear time-interpolation between neighboring calibrations
            start time of current run is stored in evtdat[12]  */
         ae_cut += PSA.ae_t_slope[chan] * (ChData[ievt]->evbuf[14] - PSA.ae_t0[chan])/3600.0;
         if (0 && chan == 31)
@@ -882,16 +882,16 @@ int eventprocess(MJDetInfo *Dets, MJRunInfo *runInfo, int nChData, BdEvent *ChDa
       // now deal with energy dependence of variation in A/E due to bremsstrahlung etc
       aovere += AOE_CORRECT_EDEP * (PSA.ae_pos[chan] - PSA.ae_cut[chan]) * (1.0 - 1593.0/e_ctc);  // FIXME: Add limit at low e_ctc
 
-      if (aovere >= PSA.ae_cut[chan]) a_e_good = 1;
-      if (aovere >= 2.0 * PSA.ae_pos[chan] - PSA.ae_cut[chan]) a_e_high = 1;
+      if (aovere >= ae_cut) a_e_good = 1;
+      if (aovere >= 2.0 * PSA.ae_pos[chan] - ae_cut) a_e_high = 1;
       if (aovere > 0 && aovere * 800.0/PSA.ae_pos[chan] < 2000) {
         his[1200+chan][(int) (aovere * 800.0/PSA.ae_pos[chan] + 0.5)]++;
-        his[1200+chan][(int) ((aovere-PSA.ae_cut[chan]) * 800.0/PSA.ae_pos[chan] + 2800.5)]++;
+        his[1200+chan][(int) ((aovere-ae_cut) * 800.0/PSA.ae_pos[chan] + 2800.5)]++;
       }
 
       /* ------- do DCR cut ------- */
       dcr_good = 0;
-      if (dcr > -100 && e_ctc > 1000) {
+      if (dcr > -100 && e_ctc > 1000) {  // FIXME?? remove cut on e_ctc?
         if (dcr < PSA.dcr_lim[chan]) dcr_good = 1;
         if (dcr < 300) {
           his[1400+chan][(int) (500.5  + dcr)]++;
@@ -903,7 +903,7 @@ int eventprocess(MJDetInfo *Dets, MJRunInfo *runInfo, int nChData, BdEvent *ChDa
       }
       /* ------- do lamda cut ------- */
       lamda_good = 0;
-      if (lamda > -100 && e_ctc > 1000) {
+      if (lamda > -100 && e_ctc > 1000) {  // FIXME?? remove cut on e_ctc?
         if (lamda < PSA.lamda_lim[chan]) lamda_good = 1;
         if (lamda < 300) {
           his[1400+chan][(int) (4500.5 + lamda)]++;
@@ -949,7 +949,7 @@ int eventprocess(MJDetInfo *Dets, MJRunInfo *runInfo, int nChData, BdEvent *ChDa
                   (strstr(Dets[chan%100].DetName, "P") ? "Enr" : "Nat"),
                   (chan > 99 ? 'L' : 'H'),
                   aovere, dcr, lamda, runInfo->runNumber, t95-t0, t100-t95,
-                  aovere - PSA.ae_cut[chan], dcr - PSA.dcr_lim[chan],
+                  aovere - ae_cut, dcr - PSA.dcr_lim[chan],
                   lamda - PSA.lamda_lim[chan], lq - PSA.lq_lim[chan]);
         }
 
@@ -1025,7 +1025,7 @@ int eventprocess(MJDetInfo *Dets, MJRunInfo *runInfo, int nChData, BdEvent *ChDa
 
           if (WRITE_SIGS && chan < runInfo->nGe) {
             // && e_ctc > 2605 && e_ctc < 2625 &&  // TEMPORARY
-            //  (aovere > 0.96*PSA.ae_cut[chan] || PSA.ae_cut[chan] < 100)) {  // TEMPORARY
+            //  (aovere > 0.96*ae_cut || ae_cut < 100)) {  // TEMPORARY
             if (MAKE_2D)
               fprintf(f_2d, "%6.1f, %6.1f, c%2.2d\n", e_ctc, aovere * 800.0/PSA.ae_pos[chan], chan);
 
@@ -1070,7 +1070,9 @@ int eventprocess(MJDetInfo *Dets, MJRunInfo *runInfo, int nChData, BdEvent *ChDa
         }
 
         if (EVENTLIST && e_ctc > EVENTLIST && e_ctc < EVENTLISTMAX && chan < 100) {
-          float ef = (0 && CTC.best_dt_lamda[chan] ? e_lamda : e_ctc);
+          float ef = e_ctc;
+          if (CTC.best_dt_lamda[chan]) ef = e_lamda;
+
           fprintf(f_evl, "%3d %7.1f %15lld %d%d%d%d.%d%d%d%d.%d%d%d%d",
                   chan, ef, time, lq_good, lamda_good, dcr_good, a_e_good,
                   DBIT(7), DBIT(6), DBIT(5), DBIT(4), DBIT(3), DBIT(2), DBIT(1), DBIT(0));
@@ -1080,7 +1082,7 @@ int eventprocess(MJDetInfo *Dets, MJRunInfo *runInfo, int nChData, BdEvent *ChDa
                   (chan > 99 ? 'L' : 'H'),
                   a_e_good + 2*dcr_good + 4*lamda_good + 8*lq_good,
                   aovere, dcr, lamda, runInfo->runNumber, t95-t0, t100-t95,
-                  aovere - PSA.ae_cut[chan], dcr - PSA.dcr_lim[chan],
+                  aovere - ae_cut, dcr - PSA.dcr_lim[chan],
                   lamda - PSA.lamda_lim[chan], lq - PSA.lq_lim[chan]);
          }
       }

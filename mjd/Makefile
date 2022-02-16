@@ -12,7 +12,9 @@ all_programs = pulser_tag_init presort PZcal skim skim_opt CTcal PSAcal sortskim
                sortrun rundiff rundiff2 siginspect threshold threshold2 \
                sumrms run_check prebuild inlcheck \
                compress decompress  compress_fcio decompress_fcio deadtime \
-               merge_skim interpolateCal check_veto_only
+               merge_skim interpolateCal check_veto_only \
+               CTcal2 sortskim2 sortrun2
+
 
 extras = noise coinc pulser_stab get_run_nums get_exposure get_run_times
 
@@ -45,8 +47,14 @@ PSAcal: $(mk_header_files) PSAcal.c  decode_runfile_header.c ep_util.c
 sortskim: $(mk_header_files) sortskim.c  ep_util.c
 	$(CC) $(CFLAGS) -o $@ sortskim.c decode_runfile_header.c ep_util.c -lm
 
+sortskim2: $(mk_header_files) sortskim2.c  ep_util.c
+	$(CC) $(CFLAGS) -o $@ sortskim2.c decode_runfile_header.c ep_util.c -lm
+
 sortrun: $(mk_source_files) $(mk_header_files) eventprocess.c ep_finalize.c pz_fitter.c
 	$(CC) $(CFLAGS) -D DO_PSA -o $@ $(mk_source_files) eventprocess.c ep_finalize.c pz_fitter.c -lm
+
+sortrun2: $(mk_source_files) $(mk_header_files) eventprocess2.c ep_finalize.c pz_fitter.c
+	$(CC) $(CFLAGS) -D DO_PSA -o $@ $(mk_source_files) eventprocess2.c ep_finalize.c pz_fitter.c -lm
 
 noise: $(mk_source_files) $(mk_header_files) eventprocess.c ep_finalize.c
 	$(CC) $(CFLAGS) -D QUIET -o $@ $(mk_source_files) eventprocess.c ep_finalize.c -lm

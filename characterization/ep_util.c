@@ -1622,6 +1622,7 @@ float autopeak4(int *his, int lo, int hi, float input_width, float *area, float 
 
   // this is like autopeak3, but allows user to specify final integration range
   // in terms of FWHM (using input_width)
+  // for the same as autopeak3, input_width would be 2.0
 
   double pos = 0, fwhm0=0;
   int    j, max = 0;
@@ -1886,6 +1887,72 @@ int CTC_info_write(MJRunInfo *runInfo, CTCinfo *CTC) {
   fclose(f_out);
   return 0;
 } /* CTC_info_write */
+
+/*  ------------------------------------------------------------ */
+
+int CTC2_info_read(MJRunInfo *runInfo, CTC2info *CTC2) {
+
+  int    i, b, n;
+  char   line[256];
+  float  a, e, f, g;
+  double o, p, q;
+  FILE   *f_in;
+
+  /*
+    read CTcal2 charge-trapping correction data from file ctc2.input
+  */
+  for (i=0; i<200; i++) {
+    CTC2->e_dt_slope[i]     = 1.0;
+    CTC2->e_lamda_slope[i]  = 1.0;
+    CTC2->e_qdt_slope[i]    = 1.0;
+    CTC2->e_qdt_quad[i]     = 1.0;
+    CTC2->e_dt_gain[i]      = 1.0;
+    CTC2->e_lamda_gain[i]   = 1.0;
+    CTC2->e_qdt_gain[i]     = 1.0;
+    CTC2->best_ctc2_res[i]  = 0;
+  }
+  if (strlen(CTC2->ctc2_fname) > 0) printf("Trying to open ctc2_fname: %s\n", CTC2->ctc2_fname);
+  if (strlen(CTC2->ctc2_fname) == 0 || !(f_in = fopen(CTC2->ctc2_fname, "r"))) {
+    strncpy(CTC2->ctc2_fname, "ctc2.input", sizeof(CTC2->ctc2_fname));
+    f_in = fopen(CTC2->ctc2_fname, "r");
+  }
+  if (!f_in) return 0;
+  printf("\n Initializing charge-trapping correction values from file %s\n\n", CTC2->ctc2_fname);
+  while (fgets(line, sizeof(line), f_in)) {
+    if (line[0] == '#' || strlen(line) < 4) continue;
+    e = 0; f = 1; b = 1;
+    if ((n=sscanf(line,
+                  "%d %f %f %f %f  %lf %lf %lf %d",
+                  &i, &a,&e,&f,&g, &o, &p, &q, &b)) < 9 ||
+        i < 0 || i > 199) {
+      printf(" ERROR; reading of ctc2.input file failed! line: %s\n", line);
+      fclose(f_in);
+      return 1;
+    }
+    CTC2->e_dt_slope[i]    = a;
+    CTC2->e_lamda_slope[i] = e;
+    CTC2->e_qdt_slope[i]   = f;
+    CTC2->e_qdt_quad[i]    = g;
+    CTC2->e_dt_gain[i]     = o;
+    CTC2->e_lamda_gain[i]  = p;
+    CTC2->e_qdt_gain[i]    = q;
+    CTC2->best_ctc2_res[i] = b;
+  }
+  fclose(f_in);
+
+  if (VERBOSE) {
+    for (i=0; i<200; i++) {
+      if (i%100 == 0)
+        printf("Chan    e_dt_slope  e_lamda_slope  e_qdt_slope |    e_dt_gain  e_lamda_gain  e_qdt_gain | best_option\n");
+      if (i%100 < runInfo->nGe)
+        printf("%4d  %12.2f  %12.2f  %12.2f | %12.8f %12.8lf %12.8lf | %6d\n",
+               i, CTC2->e_dt_slope[i], CTC2->e_lamda_slope[i], CTC2->e_qdt_slope[i],
+               CTC2->e_dt_gain[i], CTC2->e_lamda_gain[i], CTC2->e_qdt_gain[i], CTC2->best_ctc2_res[i]);
+    }
+  }
+
+  return 1;
+} /* CTC2_info_read */
 
 /*  ------------------------------------------------------------ */
 

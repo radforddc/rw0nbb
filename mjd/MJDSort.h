@@ -21,6 +21,7 @@
 #define E_THRESHOLDS_FILENAME "thresholds.input"
 #define OB_TRAP_FILENAME      "times.input"
 #define ECAL_FILENAME         "gains.input"
+#define ECAL2_FILENAME        "gains2.input"
 
 // Options to correct DCR and lamda for residual ADC Integral Nonlinearities
 // 0 for no subtraction, 1 for smoothed residual, 2 for unsmoothed
@@ -48,8 +49,8 @@
 
 // default asymmetric trap filter parameters for t0 determination
 //         can be over-ridden by values in filters.input
-#define T0_TRAP_RISE   8    //  trapezoid filter integration time (samples) for t0
 #define T0_TRAP_THRESH 4    //  trapezoid filter threshold [ADC] for t0
+#define T0_TRAP_RISE   8    //  trapezoid filter integration time (samples) for t0
 #define T0_TRAP_FLAT   10   //  trapezoid filter flat-top time (samples) for t0
 #define T0_TRAP_FALL   200  //  trapezoid filter fall time (samples) for t0
 
@@ -93,9 +94,11 @@ typedef struct{
   int  DigSerialNum, type;                        // type 0 = 4M = LBNL firmware;  type 1 = 4A = ANL firmware
   int  HGChEnabled, HGPreSumEnabled, LGChEnabled, LGPreSumEnabled;
   int  HGTrigMode, HGLEDThreshold, LGTrigMode, LGLEDThreshold;
+  // type 0 = 4M = LBNL firmware
   int  HGPostrecnt, HGPrerecnt, LGPostrecnt, LGPrerecnt;
   int  HGTrigPolarity, HGTrapThreshold, HGTrapEnabled;
   int  LGTrigPolarity, LGTrapThreshold, LGTrapEnabled;
+  // type 1 = 4A = ANL firmware
   int  HGdecimationFactor, LGdecimationFactor;
   // from controller card params:
   int   CCnum;                                    // controller card ID
@@ -183,6 +186,19 @@ typedef struct {
   int    best_dt_lamda[200];   // indicates which option has better resolution
   char   ctc_fname[256];       // ctc.input path/file name
 } CTCinfo;
+
+typedef struct {
+  float  e_qdt_slope[200];     // linear factor for quadratic drift-time correction of energy
+  float  e_qdt_quad[200];      // quadratic factor for quadratic drift-time correction of energy
+  double e_qdt_gain[200];      // gain for quadratic drift-time-corrected energy
+  float  e_dt_slope[200];      // new factor for linear drift-time correction of energy
+  double e_dt_gain[200];       // new gain for linear dt-corrected energy
+  float  e_lamda_slope[200];   // new factor for lamda correction of energy
+  double e_lamda_gain[200];    // new gain for lamda-corrected energy
+  int    best_ctc2_res[200];   // indicates which option has better resolution
+                               // 0 = dt, 1 = lamda, 2 = linear mean, 3 = qdt, 4 = quadratic mean
+  char   ctc2_fname[256];      // ctc2.input path/file name
+} CTC2info;
 
 typedef struct {
   // info to be read from psa.input:
@@ -307,6 +323,7 @@ int PZ_info_write(MJRunInfo *runInfo, PZinfo *PZI);
 int PZ_info_read(MJRunInfo *runInfo, PZinfo *PZI);
 int CTC_info_write(MJRunInfo *runInfo, CTCinfo *CTC);
 int CTC_info_read(MJRunInfo *runInfo, CTCinfo *CTC);
+int CTC2_info_read(MJRunInfo *runInfo, CTC2info *CTC2);
 int PSA_info_write(MJRunInfo *runInfo, PSAinfo *PSA);
 int PSA_info_read(MJRunInfo *runInfo, PSAinfo *PSA);
 int PZ_correct(short *signal, float *fsignal, int len, int chan, PZinfo *PZI);

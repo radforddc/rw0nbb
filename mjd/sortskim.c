@@ -13,6 +13,12 @@
 #define SUBTR_DCR_MEAN (e_adc < 8000 && \
                         ((chan < 100 && SUBTRACT_MEAN_DCR_HG) || \
                          (chan > 99  && SUBTRACT_MEAN_DCR_LG)))
+#define DBIT(j)      (1 - (1&(dirty_sig>>j)))
+
+// #define EVENTLIST    1800  // DEFAULT min energy in keV for output to event list, or 0 for no list
+#define EVENTLIST       0  // DEFAULT min energy in keV for output to event list, or 0 for no list
+#define EVENTLISTMAX 2350  // max energy in keV for output to event list
+
 
 /*  ------------------------------------------------------------ */
 
@@ -21,15 +27,23 @@ int main(int argc, char **argv) {
   MJDetInfo  Dets[NMJDETS];
   MJRunInfo  runInfo;
   int        argn=1;
+  int        eventlist = EVENTLIST;
 
 
   if (argc < 2) {
-    fprintf(stderr, "\nusage: %s fname_in\n", argv[0]);
+    fprintf(stderr, "\nusage: %s [-e event_list_min_energy] fname_in\n", argv[0]);
+    fprintf(stderr, "            set event_list_min_energy to 0 for no list\n");
     return -1;
   }
-  /* open skim data file as input */
-  while (argn < argc && argv[argn][0] == '-') argn++;
+  while (argn < argc && argv[argn][0] == '-') {
+    if (argv[argn][1] == 'e') {
+      eventlist = atoi(argv[++argn]);
+      if (eventlist < 0) eventlist = 0;
+    }
+    argn++;
+  }
  
+  /* open skim data file as input */
   FILE *f_in = fopen(argv[argn],"r");
   if (f_in == NULL) {
     fprintf(stderr, "\n Failed to open input file %s\n", argv[argn]);
@@ -50,15 +64,16 @@ int main(int argc, char **argv) {
   SavedData2 **sd2;
   int      sd_version = 1;
   int      chan;
-  float    aovere, aovere_norm, drift, dcr, lamda, lq=0, s1, s2, s3;
+  float    aovere, aovere_norm, drift, dcr, dcr_dtc, lamda, lamda_dtc, lq=0, s1, s2, s3;
   double   e_raw;
   int      nsd = 0, isd = 0;  // number of saved data, and pointer to saved data id
+  long long int  time=0;
 
   double e_adc, e_ctc, e_lamda, e_fin, gain;
   int    i, j, ie, t95, t100;
   int    *his[HIS_COUNT];
   int    *dcr_mean[200], mean_dcr_ready = 0;
-  FILE   *f_out, *f_out_2d = 0, *fp;
+  FILE   *f_out, *f_out_2d = 0, *fp, *f_evl = 0;
 
   float  elo_2d = 2605.0, ehi_2d = 2625.0;
 
@@ -129,7 +144,7 @@ int main(int argc, char **argv) {
     exit(-1);
   }
 
-  /* read PZ orrection info */
+  /* read PZ correction info */
   if (!PZ_info_read(&runInfo, &PZI)) {
     printf("\n ERROR: No initial pole-zero data read. Does PZ.input exist?\n");
     exit(-1);
@@ -170,6 +185,13 @@ int main(int argc, char **argv) {
     sprintf(fname, "PSA_ch%3.3d_2d.dat", CHAN_2D);
     f_out_2d = fopen(fname, "w");
     fprintf(f_out_2d, "#chan    E_ctc     A/E    A/E_raw    DT   DT_corr  DCR   lamda  t95-100\n");
+  }
+
+  // open evl.txt file; FIXME: change name if evl.txt already exits?
+  if (eventlist) {
+    f_evl = fopen("evl.txt", "w");
+    fprintf(f_evl, "#chan e_ctc    timestamp    LDA.bits.bits   detector   "
+            " Qx      A/E     DCR  lamda    Run    t95  t100-t95  A/E,DCR,lamda,lq - limit\n");
   }
 
   // end of initialization
@@ -255,9 +277,11 @@ int main(int argc, char **argv) {
 
     s1 = dcr - PSA.dcr_dt_slope[chan] * drift - PSA.dcr_lim[chan];
     if (SUBTR_DCR_MEAN) s1 -= (float) dcr_mean[chan][(int) e_adc/2] / 10.0;   // correct for residual INL
+    dcr_dtc = s1;
 
     s3 = lamda - PSA.lamda_dt_slope[chan] * drift - PSA.lamda_lim[chan];
     if (SUBTR_DCR_MEAN) s3 -= (float) dcr_mean[chan][4000 + (int) e_adc/2] / 10.0; // correct for residual INL
+    lamda_dtc = s3;
 
     lq -= PSA.lq_dt_slope[chan] * dtc;  // do DT correction to lq
 
@@ -284,6 +308,30 @@ int main(int argc, char **argv) {
       fprintf(f_out_2d, "%4d %9.3f %8.2f %8.2f %7.2f %7.2f %7.2f %7.2f %6d\n",
               chan, e_ctc, aovere_norm, s2, drift, dtc,
               s1, s3, t100 - t95);
+
+    // write event to evl.txt
+    if (f_evl && e_ctc > eventlist && e_ctc < EVENTLISTMAX && chan < 100) {
+      int   a_e_good = 0, a_e_high = 0, dcr_good = 0, lamda_good = 0, lq_good = 0;
+      int   dirty_sig = 0;  // in eventprocess, this would be data cleaning result
+
+      if (aovere2 >= PSA.ae_cut[chan]) a_e_good = 1;
+      if (aovere2 >= 2.0 * PSA.ae_pos[chan] - PSA.ae_cut[chan]) a_e_high = 1;  // FIXME?? Not used atm
+      if (dcr_dtc > -100 && dcr_dtc < PSA.dcr_lim[chan]) dcr_good = 1;
+      if (lamda_dtc > -100 && lamda_dtc < PSA.lamda_lim[chan]) lamda_good = 1;
+      if (lq < PSA.lq_lim[chan]) lq_good = 1;
+
+      fprintf(f_evl, "%3d %7.1f %13lld   %d%d%d%d.%d%d%d%d.%d%d%d%d",
+              chan, e_fin, time, lq_good, lamda_good, dcr_good, a_e_good,
+              DBIT(7), DBIT(6), DBIT(5), DBIT(4), DBIT(3), DBIT(2), DBIT(1), DBIT(0));
+      fprintf(f_evl, " %s %s %cG Q%x  %8.1f %6.1f %6.1f   %d %3d %3d  %8.2f %6.2f %6.2f %6.2f\n",
+              Dets[chan%100].StrName,
+              (strstr(Dets[chan%100].DetName, "P") ? "Enr" : "Nat"),
+              (chan > 99 ? 'L' : 'H'),
+              a_e_good + 2*dcr_good + 4*lamda_good + 8*lq_good,
+              aovere2, dcr_dtc, lamda_dtc, runInfo.runNumber, t95, t100-t95,
+              aovere2 - PSA.ae_cut[chan], dcr_dtc - PSA.dcr_lim[chan],
+              lamda_dtc - PSA.lamda_lim[chan], lq - PSA.lq_lim[chan]);
+    }
 
   }
 
@@ -326,7 +374,17 @@ int main(int argc, char **argv) {
   }
   fclose(f_out);
 
+  if (f_evl) {
+    fclose(f_evl);
+    if (sd_version == 1)
+      printf("\n WARNING: This evl.txt generated from skim.dat has no timestamp, t0, or LQ information.\n");
+    else
+      printf("\n WARNING: This evl.txt generated from skim.dat has no timestamp or t0 information.\n");
+    printf("    It also does NOT use time-wise interpolation of PSA values, such as from interpolateCal.\n");
+    printf("    It also does NOT include signal-wise data-cleaning cuts or granularity cuts.\n");
+  }
   if (mean_dcr_ready  < 0)
     printf("\n WARNING; no INL_DCR_input.sec was read; maybe mv INL_DCR_output.sec INL_DCR_input.sec ?\n\n"); 
+
   return 0;
 }

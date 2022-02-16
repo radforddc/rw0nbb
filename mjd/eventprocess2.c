@@ -81,7 +81,7 @@ int eventprocess(MJDetInfo *Dets, MJRunInfo *runInfo, int nChData, BdEvent *ChDa
 #ifdef DO_PSA
   float  ae_cut;
   static PZinfo PZI;                    // pole-zero info
-  static CTCinfo CTC;                   // charge-trapping correction info
+  static CTC2info CTC2;                 // charge-trapping correction info
   static PSAinfo PSA;                   // pulse-shape analysis info and limits
   static int  *his2[HIS_COUNT];         // storage for final-result histograms
   static int  *dcr_mean[200], mean_dcr_ready = 0;
@@ -140,6 +140,34 @@ int eventprocess(MJDetInfo *Dets, MJRunInfo *runInfo, int nChData, BdEvent *ChDa
     if (ep_init(Dets, runInfo, module_lu, det_lu, chan_lu) < 0) return -1;
     if (MAKE_2D)    f_2d  = fopen("2d.dat", "w");
     if (WRITE_SIGS) f_sig = fopen("sig.mat", "w");
+
+    // for new CTcal2 calibrations, read complete gains from gains2.input
+    FILE *fpc;
+    if ((fpc = fopen(ECAL2_FILENAME,"r"))) {
+      printf("\n Reading energy calibrations from %s\n", ECAL2_FILENAME);
+      char line[256], detname[8];
+      double *gh, *gl;
+      while (fgets(line, sizeof(line), fpc)) {
+        if (*line != '#' &&
+            sscanf(line, "%d", &i) == 1 &&
+            i >=0 && i < runInfo->nGe) {
+          gh = Dets[i].HGcalib;
+          gl = Dets[i].LGcalib;
+          if ((sscanf(line, "%d  %6s %lf %lf %lf %lf %lf  %lf %lf %lf %lf %lf",
+                      &i,detname, gh,gh+1,gh+2,gh+3,gh+4,gl,gl+1,gl+2,gl+3,gl+4) != 12) ||
+              !fgets(line, sizeof(line), fpc) ||
+              (sscanf(line, " %lf %lf %lf %lf %lf  %lf %lf %lf %lf %lf",
+                      gh+5,gh+6,gh+7,gh+8,gh+9,gl+5,gl+6,gl+7,gl+8,gl+9) != 10)) {
+            printf("Error reading file %s: line %s\n", ECAL2_FILENAME, line);
+            exit (-1);
+          }
+        }
+      }
+      fclose(fpc);
+    } else {
+      printf("ERROR: Cannot open %s !\n", ECAL2_FILENAME);
+      exit(-1);
+    }
 
     /* identify data types that we want to decode */
     dataId = runInfo->dataId;
@@ -282,8 +310,8 @@ int eventprocess(MJDetInfo *Dets, MJRunInfo *runInfo, int nChData, BdEvent *ChDa
       exit(-1);
     }
     /* read energy correction factors from ctc.input */
-    if (!CTC_info_read(runInfo, &CTC)) {
-      printf("\n Warning: No initial charge-trapping correction data read. Does ctc.input exist?\n");
+    if (!CTC2_info_read(runInfo, &CTC2)) {
+      printf("\n Warning: No charge-trapping correction data read. Does ctc2.input exist?\n");
       exit(-1);
     }
     /* read A/E, DCR, and lamda values from psa.input */
@@ -698,16 +726,18 @@ int eventprocess(MJDetInfo *Dets, MJRunInfo *runInfo, int nChData, BdEvent *ChDa
        *      presort, and deadtime) so it is included only by defining the flag DO_PSA
        */
 
-      double e_raw, e_adc, e_ctc, e_lamda, gain;
+      double e_raw, e_adc, e_ctc, e_lamda, e_qdt, e_fin, gain, *gains;
       float  fsignal[8192], drift, aovere, dcr, lamda, lq;
       int    t0, t80, t95, t100, ebin;
       int    a_e_good = 0, a_e_high = 0, dcr_good = 0, lamda_good = 0, lq_good = 0;
 
       if (chan%100 > NMJDETS) continue;   // 2020-02-20 FIXME: why is this suddenly necessary?
       if (chan < 100) {
-        gain = Dets[chan].HGcalib[0];
+        gain  = Dets[chan].HGcalib[0];
+        gains = Dets[chan].HGcalib;
       } else {
-        gain = Dets[chan-100].LGcalib[0];
+        gain  = Dets[chan-100].LGcalib[0];
+        gains = Dets[chan-100].LGcalib;
       }
 
       /* find t100 and t95 */
@@ -740,7 +770,6 @@ int eventprocess(MJDetInfo *Dets, MJRunInfo *runInfo, int nChData, BdEvent *ChDa
       } else {
         for (i=0; i<siglen; i++) fsignal[i] = signal[i];
       }
-
       /* do fitting of pole-zero parameters to get lamda (~ DCR) */
 
       float chisq, lamda1, frac2;
@@ -760,7 +789,7 @@ int eventprocess(MJDetInfo *Dets, MJRunInfo *runInfo, int nChData, BdEvent *ChDa
 
       /* get energy (e_raw and e_ctc) and effective drift time */
       e_ctc = get_CTC_energy(fsignal, siglen, chan, Dets, &PSA,
-                             &t0, &e_adc, &e_raw, &drift, CTC.e_dt_slope[chan]);
+                             &t0, &e_adc, &e_raw, &drift, CTC2.e_dt_slope[chan]);
       if (e_ctc < 0.001) {
         if (VERBOSE) printf("E_ctc = %.1f < 1 eV!\n", e_ctc);
         if (VERBOSE) printf("chan, t0, t100: %d %d %d; e, drift: %.2f %.2f\n",
@@ -769,13 +798,28 @@ int eventprocess(MJDetInfo *Dets, MJRunInfo *runInfo, int nChData, BdEvent *ChDa
         bad[ievt] = 7;
         // continue;      // FIXME
       }
-      ebin = 2.0 * e_ctc + 0.5;
+
+      // do lamda-CT correction and new quadrative DT correction
+      e_lamda = (e_raw + lamda * CTC2.e_lamda_slope[chan] * e_raw/6000.0) * gains[1];
+      e_qdt = (e_raw + drift * (CTC2.e_qdt_slope[chan] + drift * CTC2.e_qdt_quad[chan])) * gains[3];
+      int best = CTC2.best_ctc2_res[chan];
+      if (best == 0) {
+        e_fin = e_ctc;
+      } else if (best == 1) {
+        e_fin = e_lamda;
+      } else if (best == 2) {
+        e_fin = (e_ctc + e_lamda)/2.0;
+      } else if (best == 3) {
+        e_fin = e_qdt;
+      } else if (best == 4) {
+        e_fin = (e_qdt + e_lamda)/2.0;
+      } else {
+        printf("ERROR!! CTC2.best_ctc2_res[%d] = %d!!\n", chan, best);
+        e_fin = 0;
+      }
+      ebin = 2.0 * e_fin + 0.5;
       if (ebin < 0) ebin = 0;
       if (ebin > 8190) ebin = 8190;
-
-      // do lamda-CT correction to get e_lamda
-      e_lamda = (e_raw + lamda * CTC.e_lamda_slope[chan] * e_raw/6000.0) * CTC.e_lamda_gain[chan];
-      e_lamda *= gain;
 
       lamda *= 8.0;                   // scaled to roughly match DCR at 2 MeV
 
@@ -823,7 +867,7 @@ int eventprocess(MJDetInfo *Dets, MJRunInfo *runInfo, int nChData, BdEvent *ChDa
         aovere *= 12.71*1593/e_raw;
       }
       /* ---- end of GERDA-style A/E ---- */
-          
+
       /* get DCR from slope of PZ-corrected signal tail */
       if (siglen < 2450) {
         dcr = float_trap_fixed(fsignal, t95+50, 100, 500) / 25.0;
@@ -940,9 +984,8 @@ int eventprocess(MJDetInfo *Dets, MJRunInfo *runInfo, int nChData, BdEvent *ChDa
           his2[99][2000+chan]++;
         }
         if (EVENTLIST && e_ctc > EVENTLIST && e_ctc < EVENTLISTMAX && chan < 100) {
-          float ef = (0 && CTC.best_dt_lamda[chan] ? e_lamda : e_ctc);
           fprintf(f_evl, "%3d %7.1f %15lld %d%d%d%d.%d%d%d%d.%d%d%d%d",
-                  chan, ef, time, lq_good, lamda_good, dcr_good, a_e_good,
+                  chan, e_fin, time, lq_good, lamda_good, dcr_good, a_e_good,
                   DBIT(7), DBIT(6), DBIT(5), DBIT(4), DBIT(3), DBIT(2), DBIT(1), DBIT(0));
           fprintf(f_evl, " %s %s %cG Q0  %8.1f %6.1f %6.1f   %d %3d %3d  %8.2f %6.2f %6.2f %6.2f\n",
                   Dets[chan%100].StrName,
@@ -1070,11 +1113,9 @@ int eventprocess(MJDetInfo *Dets, MJRunInfo *runInfo, int nChData, BdEvent *ChDa
         }
 
         if (EVENTLIST && e_ctc > EVENTLIST && e_ctc < EVENTLISTMAX && chan < 100) {
-          float ef = e_ctc;
-          if (CTC.best_dt_lamda[chan]) ef = e_lamda;
 
           fprintf(f_evl, "%3d %7.1f %15lld %d%d%d%d.%d%d%d%d.%d%d%d%d",
-                  chan, ef, time, lq_good, lamda_good, dcr_good, a_e_good,
+                  chan, e_fin, time, lq_good, lamda_good, dcr_good, a_e_good,
                   DBIT(7), DBIT(6), DBIT(5), DBIT(4), DBIT(3), DBIT(2), DBIT(1), DBIT(0));
           fprintf(f_evl, " %s %s %cG Q%x  %8.1f %6.1f %6.1f   %d %3d %3d  %8.2f %6.2f %6.2f %6.2f\n",
                   Dets[chan%100].StrName,

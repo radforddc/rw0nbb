@@ -7,11 +7,11 @@
 
 #define VERBOSE 0
 #define MAKE_2D 0       // make a file with A/E, drift, and energy data for channel CHAN_2D, for 2d plots
-#define CHAN_2D 0      // channel of interest for 2d plotting
-#define HIS_COUNT 3200  // number of spectra in his[][] array
+#define CHAN_2D 0       // channel of interest for 2d plotting
+#define HIS_COUNT 3000  // number of spectra in his[][] array
 #define FWHM_RATIO 0.95 // ratio of FWHM to decide between E_dt and E_lamda charge-trapping correction
-#define FIT_CTC_QLC 0   // For qdratic lamda energy fir, switches between e_raw (0) and e_ctc_adc (1)
 
+int CTC2_info_write(MJRunInfo *runInfo, CTC2info *CTC2);
 
 /* -------------------------------------------------------------------
 
@@ -27,6 +27,23 @@ Sp ID 1400 + n:   detID n,  optimally corrected energy [0.5 keV]
 Sp ID 1600 + n:   detID n,  drift time, misc
 Sp ID 1800 + n:   detID n,  raw (non-DT-corrected) energy [0.5 keV]
 Sp ID 2000 + n:   detID n,  optimally corrected energy [0.25 keV]
+
+ctc2.rms:
+Sp ID        n:   detID n,  Energy DT-corrected with test factors    (by CTcal) [0.5 keV]
+Sp ID  200 + n:   detID n,  Energy lamda-corrected with test factors (by CTcal) [0.5 keV]
+Sp ID  400 + n:   detID n,  Mean energy (DT- and lamda-corrected)    (by CTcal) [0.5 keV]
+Sp ID  600 + n:   detID n,  New Quadratic-DT-corrected energy [ADC]
+Sp ID  800 + n:   detID n,  New DT-corrected with linear fit          [0.5 keV]
+Sp ID 1000 + n:   detID n,  New lamda-corrected with linear fit       [0.5 keV]
+Sp ID 1200 + n:   detID n,  New Mean energy (DT- and lamda-corrected) [0.5 keV]
+Sp ID 1400 + n:   detID n,  New Quadratic-DT-corrected energy         [0.5 keV]
+Sp ID 1600 + n:   detID n,  New Quadratic Mean energy (QDT and lamda) [0.5 keV]
+Sp ID 1800 + n:   detID n,  New DT-corrected with linear fit          [0.25 keV]
+Sp ID 2000 + n:   detID n,  New lamda-corrected with linear fit       [0.25 keV]
+Sp ID 2200 + n:   detID n,  New Mean energy (DT- and lamda-corrected) [0.25 keV]
+Sp ID 2400 + n:   detID n,  New Quadratic-DT-corrected energy         [0.25 keV]
+Sp ID 2600 + n:   detID n,  New Quadratic Mean energy (QDT and lamda) [0.25 keV]
+Sp ID 2800 + n:   detID n,  Best option for corrected energy          [0.25 keV]
 
 The detID is  0-57 for high gain channels, 100-157 for low gain.
 
@@ -65,6 +82,7 @@ int main(int argc, char **argv) {
 
   int clo=0, chi=-1, elo=1, ehi=16000;
   CTCinfo CTC;
+  CTC2info CTC2;
 
   // skim data
   SavedData  **sd1;
@@ -79,21 +97,14 @@ int main(int argc, char **argv) {
   float  pos, area, fwhm;
   int    i, j, roi_elo;
   int    *his[HIS_COUNT];
-  float  his2[16384]={0};
-  int    *his3[1000];
   FILE   *fp, *f_out, *f_out_2d = NULL;
 
   double s00[2][200]={{0}}, s01[2][200]={{0}}, s10[2][200]={{0}}, s11[2][200]={{0}};
   double s20[2][200]={{0}}, s21[2][200]={{0}}, s30[2][200]={{0}}, s40[2][200]={{0}};
-  float  e_qdtc_slope[200];      // linear factor for quadratic drift-time correction of energy
-  float  e_qdtc_quad[200]={0};   // quad factor for quadratic drift-time correction of energy
-  float  e_qlc_slope[200];       // linear factor for quadratic lamda correction of e_ctc
-  float  e_qlc_quad[200]={0};    // quad factor for quadratic lamda correction of e_ctc
-  double e_qdtc_gain[200];       // gain for quadratic drift-time correction of energy
-  double e_qlc_gain[200];        // gain for quadratic lamda correction of e_ctc
-  int    best_qdt_ql[200]={0};   // indicates which option has better resolution
-  double e_qdtc, e_qdtc_adc, e_qlc, e_qlc_adc;
-  // double dcr2lamda[2][200] = {{0}};
+  float  e_qdt_slope[200];      // linear factor for quadratic drift-time correction of energy
+  float  e_qdt_quad[200]={0};   // quad factor for quadratic drift-time correction of energy
+  double e_qdt_gain[200];       // gain for quadratic drift-time correction of energy
+  double e_qdtc, e_qdtc_adc;
 
 
   /* initialize */
@@ -103,11 +114,17 @@ int main(int argc, char **argv) {
     exit(-1);
   }
   for (i=1; i<HIS_COUNT; i++) his[i] = his[i-1]+8192;
-  if ((his3[0] = calloc(1000*16384, sizeof(int))) == NULL) {
-    printf("ERROR in CTcal.c; cannot malloc his!\n");
-    exit(-1);
+  strncpy(CTC2.ctc2_fname, "ctc2.input", sizeof(CTC2.ctc2_fname));
+  for (i=1; i<200; i++) {
+    CTC2.e_qdt_slope[i] = 1;     // linear factor for quadratic drift-time correction of energy
+    CTC2.e_qdt_quad[i] = 0;      // quadratic factor for quadratic drift-time correction of energy
+    CTC2.e_qdt_gain[i] = 1;      // gain for quadratic drift-time-corrected energy
+    CTC2.e_dt_slope[i] = 1;      // new factor for mean (qdt + lamda)/2 correction of energy
+    CTC2.e_dt_gain[i] = 1;       // new gain for linear dt corrected energy
+    CTC2.e_lamda_slope[i] = 1;   // new factor for lamda correction of energy
+    CTC2.e_lamda_gain[i] = 1;    // new gain for lamda-corrected energy
+    CTC2.best_ctc2_res[i] = 0;   // 0 = dt, 1 = lamda, 2 = linear mean, 3 = qdt, 4 = quadratic mean
   }
-  for (i=1; i<1000; i++) his3[i] = his3[i-1]+16384;
 
   // see if channel and energy limits are defined in the command line
   // chi=100+runInfo.nGe-1;   // runInfo.nGe not yet set! See later.
@@ -197,12 +214,15 @@ int main(int argc, char **argv) {
 
     /*
      * Step 5: Histogram: E_ctc, E_lamda
+     *         Quadratic  fit of  E_raw vs. DT     to get e_qdt_slope and _quad;
+     *         New linear fit of  E_raw vs. DT     to get e_dt_slope;
+     *         New linear fit of  E_raw vs. lamda  to get e_lamda_slope;
+     * Step 6: Histogram: E_qdtc_adc
+     *            to get: E_qdtc gain
+     * Step 7: Histogram: new E_ctc, E_lamda, E_mean, E_qdtc, E_qmean
      *            to get: FWHM
-     * Step 6: Quadratic fit to: E_raw vs. DT;        E_ctc vs. lamda
-     *                   to get: E_qdtc slope, quad;  E_qlc slope, quad
-     * Step 7: Histogram: E_qdtc_adc, E_qlc_adc
-     *            to get: E_qdtc gain, E_qlc gain
-     * Step 8: Histogram: E_qdtc, E_qlc
+     * Step 7: Histogram: new best option for corrected energy, at 0.25 keV/bin
+     *            to get: FWHM, summed FWHM, etc
      */
 
     for (isd = 0; isd < nsd; isd++) {
@@ -243,192 +263,135 @@ int main(int argc, char **argv) {
         his[    chan][(int) (2.0*e_ctc + 0.5)]++;
         his[200+chan][(int) (2.0*e_lamda + 0.5)]++;
         his[400+chan][(int) (e_ctc + e_lamda + 0.5)]++;
-        /*
-        if (e_ctc > 2611.5 && e_ctc < 2617.5) {
-          if ( dcr > -30 && dcr < 70 && lamda > -2 && lamda < 4) {
-            // evaluate sums for linear fit of DCR vs lamda
-            s00[2][chan]++;
-            s10[2][chan] += lamda;
-            s20[2][chan] += lamda * lamda;
-            s01[2][chan] += dcr;
-            s11[2][chan] += lamda * dcr;
-            //} else {
-            // printf("chan DCR lamda:  %3d %7.1f %7.2f\n", chan, dcr, lamda);
-          }
-        }
-        */
-        continue;       // end of step-1 processing for this event
-      }
-
-      /*
-      if (dcr2lamda[0][chan] > 0.01) {
-        // try using mean of lamda and dcr' for e_lamda
-        lamda = (lamda + dcr2lamda[0][chan] * dcr + dcr2lamda[1][chan]) / 2.0;
-        e_lamda_adc = e_raw + lamda * CTC.e_lamda_slope[chan];
-        e_lamda = e_lamda_adc * gain * CTC.e_lamda_gain[chan];
-        if (step == 6 && e_lamda < 4000) {
-          his[2800+chan][(int) (2.0*e_lamda + 0.5)]++;
-          his[3000+chan][(int) (e_ctc + e_lamda + 0.5)]++;
-        }
-      }
-      */
-
-      if (step == 6 && e_ctc > 2611.5 && e_ctc < 2617.5) {
-        // evaluate sums for quadratic fit of e_raw vs. drift time
-        s00[0][chan]++;
-        s10[0][chan] += drift;
-        s20[0][chan] += drift * drift;
-        s30[0][chan] += drift * drift * drift;
-        s40[0][chan] += drift * drift * drift * drift;
-        s01[0][chan] += e_raw;
-        s11[0][chan] += e_raw * drift;
-        s21[0][chan] += e_raw * drift * drift;
-        // evaluate sums for quadratic fit of e_ctc vs. lamda
-        if (lamda < -2 || lamda > 4) continue;
-        s00[1][chan]++;
-        s10[1][chan] += lamda;
-        s20[1][chan] += lamda * lamda;
-        s30[1][chan] += lamda * lamda * lamda;
-        s40[1][chan] += lamda * lamda * lamda * lamda;
-        if (FIT_CTC_QLC) {
-          s01[1][chan] += e_ctc_adc ;
-          s11[1][chan] += e_ctc_adc * lamda;
-          s21[1][chan] += e_ctc_adc * lamda * lamda;
-        } else {
+        if (e_ctc > 2611.5 && e_ctc < 2617.5) {       //   +/- 3 keV energy window
+          // evaluate sums for linear and quadratic fits of e_raw vs. drift time
+          s00[0][chan]++;
+          s10[0][chan] += drift;
+          s20[0][chan] += drift * drift;
+          s30[0][chan] += drift * drift * drift;
+          s40[0][chan] += drift * drift * drift * drift;
+          s01[0][chan] += e_raw;
+          s11[0][chan] += e_raw * drift;
+          s21[0][chan] += e_raw * drift * drift;
+          // evaluate sums for linear fit of e_raw vs. lamda
+          // if (lamda < -2 || lamda > 4) continue;
+          s00[1][chan]++;
+          s10[1][chan] += lamda;
+          s20[1][chan] += lamda * lamda;
           s01[1][chan] += e_raw ;
           s11[1][chan] += e_raw * lamda;
-          s21[1][chan] += e_raw * lamda * lamda;
         }
-        continue;
+        continue;       // end of step-5 processing for this event
       }
 
-      //e_qdtc, e_qdtc_adc, e_qlc, e_qlc_adc;
-      e_qdtc_adc = e_raw + (e_qdtc_slope[chan] + e_qdtc_quad[chan]*drift) * drift;
-      if (FIT_CTC_QLC) {
-        e_qlc_adc  = e_ctc_adc + (e_qlc_slope[chan] + e_qlc_quad[chan]*lamda) * lamda;
-      } else {
-        e_qlc_adc  = e_raw + (e_qlc_slope[chan] + e_qlc_quad[chan]*lamda) * lamda;
-      }
+      e_qdtc_adc = e_raw + (e_qdt_slope[chan] + e_qdt_quad[chan]*drift) * drift;
+
       // histogram energies in [ADC] and [0.5 keV] units
-      if (step == 7) {
+      if (step == 6) {
         // histogram energies corrected with new quadratic fit
         if (e_qdtc_adc < 8192) his[600+chan][(int) (e_qdtc_adc + 0.5)]++;
-        if (e_qlc_adc < 8192) his[800+chan][(int) (e_qlc_adc + 0.5)]++;
+      } else if (step == 7 && e_ctc < 4000) {
+        e_qdtc = e_qdtc_adc * e_qdt_gain[chan];
         // histogram energies corrected with new linear fit
-        his[2200+chan][(int) (2.0*e_ctc + 0.5)]++;
-        his[2400+chan][(int) (2.0*e_lamda + 0.5)]++;
-        his[2600+chan][(int) (e_ctc + e_lamda + 0.5)]++;
-      } else if (step == 8) {
-        e_qdtc = e_qdtc_adc * e_qdtc_gain[chan];
-        e_qlc  = e_qlc_adc  * e_qlc_gain[chan];
-        if (e_qdtc < 4090) his[1000+chan][(int) (2.0*e_qdtc + 0.5)]++;
-        if (e_qdtc < 16380/5) his2[(int) (5.0*e_ctc + 0.5)]++;
-        if (e_qlc < 4090) {
-          his[1200+chan][(int) (2.0*e_qlc + 0.5)]++;
-          his[1400+chan][(int) (e_qdtc + e_lamda + 0.5)]++;
+        his[800+chan][(int) (2.0*e_ctc + 0.5)]++;
+        his[1000+chan][(int) (2.0*e_lamda + 0.5)]++;
+        his[1200+chan][(int) (e_ctc + e_lamda + 0.5)]++;
+        // histogram energies corrected with new quadratic fit and mean
+        his[1400+chan][(int) (2.0*e_qdtc + 0.5)]++;
+        his[1600+chan][(int) (e_qdtc + e_lamda + 0.5)]++;
+
+        // now at 0.25 keV/bin
+        if (e_ctc > 1310 && e_ctc < 2750) {
+          his[1800+chan][(int) (4.0*(e_ctc - 1307.25) + 0.5)]++;
+          his[2000+chan][(int) (4.0*(e_lamda - 1307.25) + 0.5)]++;
+          his[2200+chan][(int) (2.0*(e_ctc + e_lamda - 2.0*1307.25) + 0.5)]++;
+          his[2400+chan][(int) (4.0*(e_qdtc - 1307.25) + 0.5)]++;
+          his[2600+chan][(int) (2.0*(e_qdtc + e_lamda - 2.0*1307.25) + 0.5)]++;
         }
-        if (e_qdtc > 1310 && e_qdtc < 2750 && e_qlc > 1310 && e_qlc < 2750) {
-          his[1600+chan][(int) (4.0*(e_qdtc-1307.25) + 0.5)]++;
-          his[1800+chan][(int) (4.0*(e_qlc-1307.25) + 0.5)]++;
-          //his[2000+chan][(int) (2.0*(e_qdtc + e_lamda - 2.0*1307.25) + 0.5)]++;
-          his[2000+chan][(int) (2.0*(e_qdtc + e_qlc - 2.0*1307.25) + 0.5)]++;
+
+      } else if (step == 8 && e_ctc < 2750 && e_ctc > 1320) {
+        double *sgain = Dets[chan].HGcalib;
+        if  (chan >= 100) sgain = Dets[chan-100].LGcalib;
+        float e0, e1, e3, ebest;
+        e0 = e_raw + drift * CTC2.e_dt_slope[chan];
+        e1 = e_raw + lamda * CTC2.e_lamda_slope[chan];
+        e3 = e_raw + (CTC2.e_qdt_slope[chan] + CTC2.e_qdt_quad[chan]*drift) * drift;
+        int best = CTC2.best_ctc2_res[chan];
+        if      (best == 0) ebest = e0 * sgain[0];
+        else if (best == 1) ebest = e1 * sgain[1];
+        else if (best == 2) ebest = (e0 + e1)/2.0 * sgain[2];
+        else if (best == 3) ebest = e3 * sgain[3];
+        else if (best == 4) ebest = (e3 + e1)/2.0 * sgain[4];
+        else {
+          printf("ERROR! best_res option for chan %d = %d\n\n", chan, best);
+          exit(-1);
         }
-        if (e_qdtc > 20 && e_qdtc < 2750 && e_qlc > 20 && e_qlc < 2750) {
-          his3[    chan][(int) (4.0*(e_ctc)           + 0.5)]++;
-          his3[200+chan][(int) (4.0*(e_lamda)         + 0.5)]++;
-          his3[400+chan][(int) (2.0*(e_ctc + e_lamda) + 0.5)]++;
-          his3[600+chan][(int) (4.0*(e_qdtc)          + 0.5)]++;
-          his3[800+chan][(int) (2.0*(e_qdtc + e_qlc)  + 0.5)]++;
-        }
+        his[2800+chan][(int) (4.0*(ebest - 1307.25) + 0.5)]++;
       }
-      // make file for 2D plots  of E vs CTC
-      // roi_elo = DEP_E - 40.0;
-      // if (f_out_2d && step == 8 && chan == chan_2d && e_ctc >= roi_elo && e_ctc <= roi_elo+80)
-      roi_elo = CAL_E - 40.0;
-      if (f_out_2d && step == 8 && chan == chan_2d && e_ctc >= roi_elo && e_ctc <= roi_elo+700) {
-        fprintf(f_out_2d, "%4d %9.2f %8.2f %8.2f %8.2f %10.3f %7.3f %7.3f %9.2f\n",
-                chan, e_raw*gain, e_ctc, e_qdtc, e_lamda, drift, lamda, dcr, aovere);
+
+      if (step == 8) {
+        // make file for 2D plots  of E vs CTC
+        // roi_elo = DEP_E - 40.0;
+        // if (f_out_2d && step == 8 && chan == chan_2d && e_ctc >= roi_elo && e_ctc <= roi_elo+80)
+        roi_elo = CAL_E - 40.0;
+        if (f_out_2d && step == 8 && chan == chan_2d && e_ctc >= roi_elo && e_ctc <= roi_elo+700) {
+          fprintf(f_out_2d, "%4d %9.2f %8.2f %8.2f %8.2f %10.3f %7.3f %7.3f %9.2f\n",
+                  chan, e_raw*gain, e_ctc, e_qdtc, e_lamda, drift, lamda, dcr, aovere);
+        }
       }
     }
+
     // --------------------------------------------------------------------------
     // end of event processing for this step
     // now process the current histograms to find calibrations, optimal correction factors, etc
 
     if (step == 5) {
-      // extract E_ctc fwhm
-
-      /*
-      // extract dcr-vs-lamda slopes
-      for (chan=0; chan<200; chan++) {
-        if (s00[2][chan] > 500) {
-          // numerical errors from dcr*dcr are much larger in s20 than lamda*lamda in s02, so use second set of  numbers
-          double a = (s10[2][chan]*s01[2][chan] - s11[2][chan]*s00[2][chan])/(s10[2][chan]*s10[2][chan] - s20[2][chan]*s00[2][chan]);
-          double b = (s01[2][chan] - a*s10[2][chan]) / s00[2][chan];
-          printf("DCR vs lamda fit:  %3d %7.2f %6.2f   ->  %5.3f %6.3f\n", chan, a, b, 1.0/a, -b/a);
-          dcr2lamda[0][chan] = 1.0/a;
-          dcr2lamda[1][chan] = -b/a;
-        }
-      }
-      */
-      continue;
-    }
-
-    if (step == 6) {
       /* analyse fit sums to extract quadratice fits of energies vs drift time and lamda */
       for (chan=0; chan<200; chan++) {
-        e_qdtc_slope[chan] = CTC.e_dt_slope[chan];
-        e_qlc_slope[chan]  = CTC.e_lamda_slope[chan];
+        e_qdt_slope[chan] = CTC.e_dt_slope[chan];
         if (s00[0][chan] > 500) {
           // quadratic fit against drift time:
           double d = (s00[0][chan]*s20[0][chan]*s40[0][chan] - s10[0][chan]*s10[0][chan]*s40[0][chan] -
                       s00[0][chan]*s30[0][chan]*s30[0][chan] + s10[0][chan]*s20[0][chan]*s30[0][chan]*2.0 -
                       s20[0][chan]*s20[0][chan]*s20[0][chan]);
           if (fabs(d) < 0.1) continue;
-          e_qdtc_slope[chan] = -(s11[0][chan]*s00[0][chan]*s40[0][chan] - s01[0][chan]*s10[0][chan]*s40[0][chan] +
-                                 s01[0][chan]*s20[0][chan]*s30[0][chan] - s21[0][chan]*s00[0][chan]*s30[0][chan] -
-                                 s11[0][chan]*s20[0][chan]*s20[0][chan] + s21[0][chan]*s10[0][chan]*s20[0][chan]) / d;
-          e_qdtc_quad[chan]  = -(s01[0][chan]*s10[0][chan]*s30[0][chan] - s11[0][chan]*s00[0][chan]*s30[0][chan] -
-                                 s01[0][chan]*s20[0][chan]*s20[0][chan] + s11[0][chan]*s10[0][chan]*s20[0][chan] +
-                                 s21[0][chan]*s00[0][chan]*s20[0][chan] - s21[0][chan]*s10[0][chan]*s10[0][chan]) / d;
+          e_qdt_slope[chan] = -(s11[0][chan]*s00[0][chan]*s40[0][chan] - s01[0][chan]*s10[0][chan]*s40[0][chan] +
+                                s01[0][chan]*s20[0][chan]*s30[0][chan] - s21[0][chan]*s00[0][chan]*s30[0][chan] -
+                                s11[0][chan]*s20[0][chan]*s20[0][chan] + s21[0][chan]*s10[0][chan]*s20[0][chan]) / d;
+          e_qdt_quad[chan]  = -(s01[0][chan]*s10[0][chan]*s30[0][chan] - s11[0][chan]*s00[0][chan]*s30[0][chan] -
+                                s01[0][chan]*s20[0][chan]*s20[0][chan] + s11[0][chan]*s10[0][chan]*s20[0][chan] +
+                                s21[0][chan]*s00[0][chan]*s20[0][chan] - s21[0][chan]*s10[0][chan]*s10[0][chan]) / d;
+          CTC2.e_qdt_slope[chan] = e_qdt_slope[chan];
+          CTC2.e_qdt_quad[chan]  = e_qdt_quad[chan];
           // linear fit:
           double a = -(s10[0][chan]*s01[0][chan] - s11[0][chan]*s00[0][chan])/
                       (s10[0][chan]*s10[0][chan] - s20[0][chan]*s00[0][chan]);
           printf("%3d %5.1f -> %5.1f  -> %5.1f %6.2f;  ",
-                 chan, CTC.e_dt_slope[chan], a, e_qdtc_slope[chan], e_qdtc_quad[chan]);
-          CTC.e_dt_slope[chan] = a;
+                 chan, CTC.e_dt_slope[chan], a, e_qdt_slope[chan], e_qdt_quad[chan]);
+          CTC.e_dt_slope[chan] = CTC2.e_dt_slope[chan] = a;
 
-          // quadratic fit against lamda:
-          d = (s00[1][chan]*s20[1][chan]*s40[1][chan] - s10[1][chan]*s10[1][chan]*s40[1][chan] -
-               s00[1][chan]*s30[1][chan]*s30[1][chan] + s10[1][chan]*s20[1][chan]*s30[1][chan]*2.0 -
-               s20[1][chan]*s20[1][chan]*s20[1][chan]);
-          if (fabs(d) < 0.1) { printf("\n"); continue; }
-          e_qlc_slope[chan] = -(s11[1][chan]*s00[1][chan]*s40[1][chan] - s01[1][chan]*s10[1][chan]*s40[1][chan] +
-                                s01[1][chan]*s20[1][chan]*s30[1][chan] - s21[1][chan]*s00[1][chan]*s30[1][chan] -
-                                s11[1][chan]*s20[1][chan]*s20[1][chan] + s21[1][chan]*s10[1][chan]*s20[1][chan]) / d;
-          e_qlc_quad[chan]  = -(s01[1][chan]*s10[1][chan]*s30[1][chan] - s11[1][chan]*s00[1][chan]*s30[1][chan] -
-                                s01[1][chan]*s20[1][chan]*s20[1][chan] + s11[1][chan]*s10[1][chan]*s20[1][chan] +
-                                s21[1][chan]*s00[1][chan]*s20[1][chan] - s21[1][chan]*s10[1][chan]*s10[1][chan]) / d;
-          // linear fit:
+          // linear fit against lamda:
           a = -(s10[1][chan]*s01[1][chan] - s11[1][chan]*s00[1][chan])/
                (s10[1][chan]*s10[1][chan] - s20[1][chan]*s00[1][chan]);
-          printf("%5.1f -> %5.1f -> %5.1f %6.2f\n",
-                 CTC.e_lamda_slope[chan], a, e_qlc_slope[chan], e_qlc_quad[chan]);
-          CTC.e_lamda_slope[chan] = a;
+          printf("%5.1f -> %5.1f\n", CTC.e_lamda_slope[chan], a);
+          CTC.e_lamda_slope[chan] = CTC2.e_lamda_slope[chan] = a;
+          if (0 && (chan == 110 || chan == 10 || chan == 112))
+            printf("s10 s01 s11 s00 = %.2e %.2e %.2e %.2e\n"
+                   "s10 s10 s20 s00 = %.2e %.2e %.2e %.2e   %.2e\n",
+                   s10[1][chan], s01[1][chan], s11[1][chan], s00[1][chan],
+                   s10[1][chan], s10[1][chan], s20[1][chan], s00[1][chan], s00[0][chan]);
         }
       }
 
-    } else if (step == 7) {
-      /* find position of 2614.5-keV peak and use that to compute the calibration gainsc */
-      FILE *fp = fopen("fwhm_ctc2.txt", "w");
-      fprintf(fp, "#chan   QDTC    QLC\n");
-      float fwhm0 = 0;
+    } else if (step == 6) {
+      /* find position of 2614.5-keV peak and use that to compute the qdt calibration gain */
+      printf(" Finding gain for Quad DT correction\n");
       for (chan=0; chan<200; chan++) {
-        e_qdtc_gain[chan] =  e_qlc_gain[chan] = 1;
-        if (s00[0][chan] < 501) continue;
-        best_qdt_ql[chan] = 0;
+        e_qdt_gain[chan] = 1;
+        if (s00[0][chan] < 501) continue;  // not enough events
         if (chan%100 >= runInfo.nGe) continue;
         if (chan%100 == 0) printf("\n");
-        // first for E_qdtc
+        // for E_qdtc
         fwhm = 5;
         j = 4000;
         if (runInfo.flashcam == 3) j = 3000;  // HADES data has lower effective gain
@@ -437,43 +400,67 @@ int main(int argc, char **argv) {
           j = 1700;
         }
         if ((pos = autopeak3(his[600+chan], j, 8000, &area, &fwhm))) {
-          fwhm0 = fwhm;
-          if (chan < 100) {
-            e_qdtc_gain[chan] = Dets[chan].HGcalib[2] = CAL_E/pos;
-            printf("Ch %3d %6.1f:   E_qdtc_adc  P = %7.1f A = %7.0f  FWHM = %7.2f keV\n",
-                   chan, CAL_E, pos, area, fwhm*Dets[chan].HGcalib[2]);
-            fprintf(fp, "%4d %7.3f", chan, fwhm*Dets[chan].HGcalib[2]);
-          } else {
-            e_qdtc_gain[chan] = Dets[chan-100].LGcalib[2] = CAL_E/pos;
-            printf("Ch %3d %6.1f:   E_qdtc_adc  P = %7.1f A = %7.0f  FWHM = %7.2f keV\n",
-                   chan, CAL_E, pos, area, fwhm*Dets[chan-100].LGcalib[2]);
-            fprintf(fp, "%4d %7.3f", chan, fwhm*Dets[chan-100].LGcalib[2]);
-          }
-        }
-
-        // now for E_qlc
-        fwhm = 5;
-        j = 4000;
-        if (runInfo.flashcam == 3) j = 3000;  // HADES data has lower effective gain
-        if (chan > 99) {
-          fwhm = 3;
-          j = 1700;
-        }
-        if ((pos = autopeak3(his[800+chan], j, 8000, &area, &fwhm))) {
-          if (fwhm < fwhm0 * FWHM_RATIO) best_qdt_ql[chan] = 1;
-          if (chan < 100) {
-            e_qlc_gain[chan] = Dets[chan].HGcalib[3] = CAL_E/pos;
-            printf("                 E_qlc_adc   P = %7.1f A = %7.0f; FWHM = %7.2f keV\n",
-                   pos, area, fwhm*Dets[chan].HGcalib[3]);
-            fprintf(fp, " %7.3f\n", fwhm*Dets[chan].HGcalib[3]);
-          } else {
-            e_qlc_gain[chan] = Dets[chan-100].LGcalib[3] = CAL_E/pos;
-            printf("                 E_qlc_adc   P = %7.1f A = %7.0f; FWHM = %7.2f keV\n",
-                   pos, area, fwhm*Dets[chan-100].LGcalib[3]);
-            fprintf(fp, " %7.3f\n", fwhm*Dets[chan-100].LGcalib[3]);
-          }
+          e_qdt_gain[chan] = CAL_E/pos;
+          printf("Ch %3d %6.1f:   E_qdtc_adc  P = %7.1f A = %7.0f  FWHM = %7.2f keV\n",
+                 chan, CAL_E, pos, area, fwhm*e_qdt_gain[chan]);
         }
       }
+
+    } else if (step == 7) {
+      /* find widths of 2614.5-keV peak for each correction option and use that to determine best option */
+      printf(" Finding peak widths for each correction option\n");
+      printf("    ...Results will be written to fwhm_ctc2.txt\n");
+      fp = fopen("fwhm_ctc2.txt", "w");
+      fprintf(fp, "#chan DT_lin  lamda mean_lin DT_quad Mean_quad Best BestOption");
+      float penalty[5] = {1.0, 0.95, 0.975, 0.998, 0.975};   // penalty factor for FWHM from each option
+                                                             //    (FWHM_RATIO in CTcal.c)
+      for (chan=0; chan<200; chan++) {
+        double gain[5] = {1};
+        float fwhm0[5] = {99}, area0[5] = {100};
+        int   best = 0;
+        if (chan%100 == 99) fprintf(fp, "\n");
+        if (s00[0][chan] < 501) continue;  // not enough events
+        if (chan%100 >= runInfo.nGe) continue;
+        fprintf(fp, "\n%4d ", chan);
+        for (int iopt=0; iopt < 5; iopt++) {
+          fwhm = 6;
+          j = 2 * CAL_E - 200;
+          // if ((pos = autopeak3(his[200*iopt + 800 + chan], j, j+400, &area, &fwhm))) {  // equiv to autopeak4(,,,2.0f,,)
+          if ((pos = autopeak4(his[200*iopt + 800 + chan], j, j+400, 1.5f, &area0[iopt], &fwhm))) {
+            // printf("Ch %3d option %d  P = %7.1f A = %7.0f  FWHM = %7.2f keV\n",
+            //        chan, iopt, pos, area, fwhm/2.0);
+            fprintf(fp, "%7.3f", fwhm/2.0);
+            if (fwhm0[best] * penalty[iopt] > fwhm * penalty[best]) best = iopt;
+            fwhm0[iopt] = fwhm;
+            gain[iopt] = 2.0 * CAL_E/pos;
+            // Dets[chan].HGcalib[2] = CAL_E/pos;
+          } else {
+            fprintf(fp, "  -----");            
+            area0[iopt] = 1;
+          }
+        }
+        fprintf(fp, "%12.3f   %d", fwhm0[best]/2.0, best);
+        // save new gain values
+        double *sgain = Dets[chan].HGcalib, *sgunc = Dets[chan].HGcalib_unc;
+        if  (chan >= 100) {
+          sgain = Dets[chan-100].LGcalib;
+          sgunc = Dets[chan-100].LGcalib_unc;
+        }
+        gain[0] *= sgain[0];
+        gain[1] *= sgain[0] * CTC.e_lamda_gain[chan];
+        gain[2] *= sgain[0] * (1.0+CTC.e_lamda_gain[chan])/2.0;
+        gain[3] *= e_qdt_gain[chan];
+        gain[4] *= e_qdt_gain[chan] * (1.0+CTC.e_lamda_gain[chan])/2.0;
+        for (i=0; i<5; i++) {
+          sgain[i] = gain[i];
+          sgunc[i] = gain[i] * (1.0 / 2.355) * fwhm0[i] / sqrt(area0[i]) / CAL_E;
+        }
+        CTC2.e_dt_gain[chan] = gain[0];
+        CTC2.e_lamda_gain[chan] = gain[1];
+        CTC2.e_qdt_gain[chan] = gain[3];
+        CTC2.best_ctc2_res[chan] = best;
+      }
+      fprintf(fp, "\n");
       fclose(fp);
     }
   }
@@ -483,68 +470,98 @@ int main(int argc, char **argv) {
   // write energy calibrations to gains.output
   if ((f_out = fopen("gains2.output","w"))) {
     printf("\n Writing energy calibrations to gains.output\n");
-    for (i=0; i<runInfo.nGe; i++)
+    fprintf(f_out, "chan detector"
+            " HG: lin_dt    lamda   lin_mean   quad_dt quad_mean  "
+            //  9.7lfxxxx 9.7lfxxxx 9.7lfxxxx 9.7lfxxxx 9.7lfxxxx
+            " LG: lin_dt    lamda   lin_mean   quad_dt quad_mean\n           "
+            "    ............... HG uncertainties ................"
+            "    ............... LG uncertainties ................\n");
+            //        9.7lfxxxx 9.7lfxxxx 9.7lfxxxx 9.7lfxxxx 9.7lfxxxx
+    for (i=0; i<runInfo.nGe; i++) 
       fprintf(f_out,
-              "%3d %10.8lf %10.8lf %s\n",
-              i, Dets[i].HGcalib[0], Dets[i].LGcalib[0], Dets[i].StrName);
+              "%3d  %6s    %9.7lf %9.7lf %9.7lf %9.7lf %9.7lf    %9.7lf %9.7lf %9.7lf %9.7lf %9.7lf\n"
+              "               %9.7lf %9.7lf %9.7lf %9.7lf %9.7lf    %9.7lf %9.7lf %9.7lf %9.7lf %9.7lf\n",
+              i, Dets[i].StrName,
+              Dets[i].HGcalib[0], Dets[i].HGcalib[1], Dets[i].HGcalib[2], Dets[i].HGcalib[3], Dets[i].HGcalib[4],
+              Dets[i].LGcalib[0], Dets[i].LGcalib[1], Dets[i].LGcalib[2], Dets[i].LGcalib[3], Dets[i].LGcalib[4],
+              Dets[i].HGcalib_unc[0], Dets[i].HGcalib_unc[1], Dets[i].HGcalib_unc[2], Dets[i].HGcalib_unc[3],
+              Dets[i].HGcalib_unc[4], Dets[i].LGcalib_unc[0], Dets[i].LGcalib_unc[1], Dets[i].LGcalib_unc[2],
+              Dets[i].LGcalib_unc[3], Dets[i].LGcalib_unc[4]);
     fclose(f_out);
   }
 
   // write charge-trapping data to ctc.output
-  // CTC_info_write(&runInfo, &CTC);
+  CTC2_info_write(&runInfo, &CTC2);
 
   // write out histograms
   f_out = fopen("ctc2.rms", "w");
   for (i=0; i<HIS_COUNT; i++) {
-   char spname[256];
+    char spname[256];
     if (i < 200) {
-      sprintf(spname, "%d; ch %d DT-corrected energy [0.5 keV]", i, i);
+      sprintf(spname, "%d; ch %d old linear DT-corrected energy [0.5 keV]", i, i);
     } else if (i < 400) {
-      sprintf(spname, "%d; ch %d lamda-corrected energy [0.5 keV]", i, i%200);
+      sprintf(spname, "%d; ch %d old lamda-corrected energy [0.5 keV]", i, i%200);
     } else if (i < 600) {
-      sprintf(spname, "%d; ch %d mean linear corrected energy [0.5 keV]", i, i%200);
+      sprintf(spname, "%d; ch %d old mean linear corrected energy [0.5 keV]", i, i%200);
     } else if (i < 800) {
-      sprintf(spname, "%d; ch %d QDT-corrected energy [ADC]", i, i%200);
+      sprintf(spname, "%d; ch %d New QDT-corrected energy [ADC]", i, i%200);
     } else if (i < 1000) {
-      sprintf(spname, "%d; ch %d QL-corrected energy [ADC]", i, i%200);
+      sprintf(spname, "%d; ch %d New DT-corrected with linear fit          [0.5 keV]", i, i%200);
     } else if (i < 1200) {
-      sprintf(spname, "%d; ch %d QDT-corrected energy [0.5 keV]", i, i%200);
+      sprintf(spname, "%d; ch %d New lamda-corrected with linear fit       [0.5 keV]", i, i%200);
     } else if (i < 1400) {
-      sprintf(spname, "%d; ch %d QL-corrected energy [0.5 keV]", i, i%200);
+      sprintf(spname, "%d; ch %d New Mean energy (DT- and lamda-corrected) [0.5 keV]", i, i%200);
     } else if (i < 1600) {
-      sprintf(spname, "%d; ch %d mean quad corrected energy [0.5 keV]", i, i%200);
+      sprintf(spname, "%d; ch %d New Quadratic-DT-corrected energy         [0.5 keV]", i, i%200);
     } else if (i < 1800) {
-      sprintf(spname, "%d; ch %d QDT-corrected energy [0.25 keV]", i, i%200);
+      sprintf(spname, "%d; ch %d New Quadratic Mean energy (QDT and lamda) [0.5 keV]", i, i%200);
     } else if (i < 2000) {
-      sprintf(spname, "%d; ch %d QL-corrected energy [0.25 keV]", i, i%200);
+      sprintf(spname, "%d; ch %d New DT-corrected with linear fit          [0.25 keV]", i, i%200);
+    } else if (i < 2200) {
+      sprintf(spname, "%d; ch %d New lamda-corrected with linear fit       [0.25 keV]", i, i%200);
+    } else if (i < 2400) {
+      sprintf(spname, "%d; ch %d New Mean energy (DT- and lamda-corrected) [0.25 keV]", i, i%200);
+    } else if (i < 2600) {
+      sprintf(spname, "%d; ch %d New Quadratic-DT-corrected energy         [0.25 keV]", i, i%200);
+    } else if (i < 2800) {
+      sprintf(spname, "%d; ch %d New Quadratic Mean energy (QDT and lamda) [0.25 keV]", i, i%200);
     } else {
-      sprintf(spname, "%d; ch %d mean quad corrected energy [0.25 keV]", i, i%200);
+      sprintf(spname, "%d; ch %d Best option for corrected energy          [0.25 keV]", i, i%200);
     }
     write_his(his[i], 8192, i, spname, f_out);
   }
   fclose(f_out);
-  
-  f_out = fopen("ctc3.rms", "w");
-  for (i=0; i<1000; i++) {
-   char spname[256];
-    if (i < 200) {
-      sprintf(spname, "%d; ch %d DT-corrected energy [0.25 keV]", i, i);
-    } else if (i < 400) {
-      sprintf(spname, "%d; ch %d lamda-corrected energy [0.25 keV]", i, i%200);
-    } else if (i < 600) {
-      sprintf(spname, "%d; ch %d mean linear corrected energy [0.25 keV]", i, i%200);
-    } else if (i < 800) {
-      sprintf(spname, "%d; ch %d QDT-corrected energy [0.25 keV]", i, i%200);
-    } else {
-      sprintf(spname, "%d; ch %d mean quad corrected energy [0.25 keV]", i, i%200);
-    }
-    write_his(his3[i], 16384, i, spname, f_out);
-  }
-  fclose(f_out);
-  
-  f_out = fopen("ctc.dat", "w");
-  fwrite(his2, 1, sizeof(his2), f_out);
-  fclose(f_out);
-  
+
   return 0;
 }
+
+/* ---------------------------------------- */
+
+int CTC2_info_write(MJRunInfo *runInfo, CTC2info *CTC2) {
+
+  int   i;
+  FILE  *f_out;
+
+  /*
+    write new charge-trapping correction data to file ctc2.output
+  */
+  if (!(f_out = fopen("ctc2.output", "w"))) {
+    printf("\n ERROR: Cannot open file ctc2.output for writing!\n");
+    return 1;
+  }
+  printf("\n Writing charge-trapping correction values to file ctc2.output\n");
+
+  for (i=0; i<200; i++) {
+    if (i%100 == 0)
+      fprintf(f_out,
+              "#Chan  lin_dt_slope  lamda_slope quad_dt_slope quad_dt_quad    lin_dt_gain   lamda_gain     qdt_gain  best_option\n");
+    //         %5dxx  %12.4fxxxxxx %12.4fxxxxxx  %12.4fxxxxxx %12.4fxxxxxx   %12.8lfxxxxx %12.8lfxxxxx %12.8lfxxxxx %10dxxxxxx
+    if (i%100 < runInfo->nGe)
+      fprintf(f_out, "%5d  %12.4f %12.4f  %12.4f %12.4f   %12.8lf %12.8lf %12.8lf %10d\n",
+              i, CTC2->e_dt_slope[i], CTC2->e_lamda_slope[i], CTC2->e_qdt_slope[i], CTC2->e_qdt_quad[i],
+              CTC2->e_dt_gain[i], CTC2->e_lamda_gain[i], CTC2->e_qdt_gain[i], CTC2->best_ctc2_res[i]);
+  }
+
+  fclose(f_out);
+  return 0;
+} /* CTC_info_write */

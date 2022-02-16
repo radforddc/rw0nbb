@@ -47,7 +47,7 @@ int main(int argc, char **argv) {
     if ((c = strstr(ds_fname, "/skim.dat"))) {
       *c = 0;
     } else {
-      printf("\n ERROR: No directory found in %s; c = %d\n", ds_fname, (int) c);
+      printf("\n ERROR: No directory found in %s; c = %lld\n", ds_fname, (long long int) c);
       exit(-1);
     }
     sprintf(CTC.ctc_fname, "%s/ctc.input", ds_fname);

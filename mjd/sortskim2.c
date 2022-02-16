@@ -42,7 +42,7 @@ int main(int argc, char **argv) {
     }
     argn++;
   }
- 
+
   /* open skim data file as input */
   FILE *f_in = fopen(argv[argn],"r");
   if (f_in == NULL) {
@@ -55,7 +55,7 @@ int main(int argc, char **argv) {
 
 /* ---------------------------------------------------- */
 
-  CTCinfo CTC;
+  CTC2info CTC2;
   PSAinfo PSA;
   PZinfo  PZI;
 
@@ -69,7 +69,7 @@ int main(int argc, char **argv) {
   int      nsd = 0, isd = 0;  // number of saved data, and pointer to saved data id
   long long int  time=0;
 
-  double e_adc, e_ctc, e_lamda, e_fin, gain;
+  double e_adc, e_ctc, e_lamda, e_qdt, e_fin, *gains;
   int    i, j, ie, t95, t100;
   int    *his[HIS_COUNT];
   int    *dcr_mean[200], mean_dcr_ready = 0;
@@ -81,12 +81,12 @@ int main(int argc, char **argv) {
   /* initialize */
   /* malloc and clear histogram space */
   if ((his[0] = calloc(HIS_COUNT*8192, sizeof(int))) == NULL) {
-    printf("ERROR in sortskim.c; cannot malloc his!\n");
+    printf("ERROR in sortskim2.c; cannot malloc his!\n");
     exit(-1);
   }
   for (i=1; i<HIS_COUNT; i++) his[i] = his[i-1] + 8192;
   if ((dcr_mean[0] = calloc(200*8192, sizeof(int))) == NULL) {
-    printf("ERROR in sortskim.c; cannot malloc dcr_mean!\n");
+    printf("ERROR in sortskim2.c; cannot malloc dcr_mean!\n");
     exit(-1);
   }
   for (i=1; i<200; i++) dcr_mean[i] = dcr_mean[i-1] + 8192;
@@ -110,7 +110,7 @@ int main(int argc, char **argv) {
       (sd_version == 2 &&
        ((sd2 = malloc(nsd*sizeof(*sd2))) == NULL ||
         (sd2[0] = malloc(nsd*sizeof(*sd2[0]))) == NULL))) {
-    printf("ERROR in sortskim.c; cannot malloc SavedData!\n");
+    printf("ERROR in sortskim2.c; cannot malloc SavedData!\n");
     exit(-1);
   }
   printf("Skim data mode = %d\n", sd_version);
@@ -125,22 +125,30 @@ int main(int argc, char **argv) {
   printf(" Skim is data from runs starting at number %d from file %s\n",
          runInfo.runNumber, runInfo.filename);
 
-  /* read gains from gains.input (will have changed since skim was created) */
-  if ((fp = fopen(ECAL_FILENAME,"r"))) {
-    printf("\n Reading energy calibrations from %s\n", ECAL_FILENAME);
-    char line[256];
-    double g1 = 0.5, g2=1.5;
+  /* read gains from gains2.input (will have changed since skim was created) */
+  if ((fp = fopen(ECAL2_FILENAME,"r"))) {
+    printf("\n Reading energy calibrations from %s\n", ECAL2_FILENAME);
+    char line[256], detname[6];
+    double *gh, *gl;
     while (fgets(line, sizeof(line), fp)) {
       if (*line != '#' &&
-          sscanf(line, "%d %lf %lf", &i, &g1, &g2) == 3 &&
+          sscanf(line, "%d", &i) == 1 &&
           i >=0 && i < runInfo.nGe) {
-        Dets[i].HGcalib[0] = g1;
-        Dets[i].LGcalib[0] = g2;
+        gh = Dets[i].HGcalib;
+        gl = Dets[i].LGcalib;
+        if ((sscanf(line, "%d  %6s %lf %lf %lf %lf %lf  %lf %lf %lf %lf %lf",
+                    &i,detname, gh,gh+1,gh+2,gh+3,gh+4,gl,gl+1,gl+2,gl+3,gl+4) != 12) ||
+            !fgets(line, sizeof(line), fp) ||
+            (sscanf(line, " %lf %lf %lf %lf %lf  %lf %lf %lf %lf %lf",
+                    gh+5,gh+6,gh+7,gh+8,gh+9,gl+5,gl+6,gl+7,gl+8,gl+9) != 10)) {
+          printf("Error reading file %s: line %s\n", ECAL2_FILENAME, line);
+          exit (-1);
+        }
       }
     }
     fclose(fp);
   } else {
-    printf("ERROR: Cannot open %s !\n", ECAL_FILENAME);
+    printf("ERROR: Cannot open %s !\n", ECAL2_FILENAME);
     exit(-1);
   }
 
@@ -149,11 +157,12 @@ int main(int argc, char **argv) {
     printf("\n ERROR: No initial pole-zero data read. Does PZ.input exist?\n");
     exit(-1);
   }
-  /* read energy correction factors from ctc.input */
-  if (!CTC_info_read(&runInfo, &CTC)) {
-    printf("\n ERROR: No initial charge-trapping correction data read. Does ctc.input exist?\n");
+  /* read energy correction factors from ctc2.input */
+  if (!CTC2_info_read(&runInfo, &CTC2)) {
+    printf("\n ERROR: No CTcal2 charge-trapping correction data read. Does ctc2.input exist?\n");
     exit(-1);
   }
+
   /* read A/E, DCR, and lamda values from psa.input */
   /* also read individual trapezoid values from filters.input (if it exists) */
   if (!PSA_info_read(&runInfo, &PSA)) {
@@ -221,20 +230,33 @@ int main(int argc, char **argv) {
     }
     // if (t100 - t95 > 15) continue;
     if (chan < 100) {
-      gain = Dets[chan].HGcalib[0];
+      gains = Dets[chan].HGcalib;
     } else {
-      gain = Dets[chan-100].LGcalib[0];
+      gains = Dets[chan-100].LGcalib;
     }
 
-    e_adc = e_raw + drift * CTC.e_dt_slope[chan];
-    e_ctc = e_adc * gain;
-    e_lamda = (e_raw + lamda * CTC.e_lamda_slope[chan] / 6000.0) * gain * CTC.e_lamda_gain[chan];
-    if (CTC.best_dt_lamda[chan]) {
-      e_fin = e_lamda;
-    } else {
+    e_adc = e_raw + drift * CTC2.e_dt_slope[chan];
+    e_ctc = e_adc * gains[0];
+    e_lamda = (e_raw + lamda * CTC2.e_lamda_slope[chan] * e_raw/6000.0) * gains[1];
+    e_qdt = (e_raw + drift * (CTC2.e_qdt_slope[chan] + drift * CTC2.e_qdt_quad[chan])) * gains[3];
+    int best = CTC2.best_ctc2_res[chan];
+    
+    if (best == 0) {
       e_fin = e_ctc;
+    } else if (best == 1) {
+      e_fin = e_lamda;
+    } else if (best == 2) {
+      e_fin = (e_ctc + e_lamda)/2.0;
+    } else if (best == 3) {
+      e_fin = e_qdt;
+    } else if (best == 4) {
+      e_fin = (e_qdt + e_lamda)/2.0;
+    } else {
+      printf("ERROR!! CTC2.best_ctc2_res[%d] = %d!!\n", chan, best);
+      e_fin = 0;
     }
     ie = e_fin * 2.0 + 0.5;
+    // printf("chan %3d e_fin %6.1f best %d\n", chan, e_fin, best);
 
     /* histogram raw A/E, E_dtc, E_lamda, final E, all with no psa cuts */
     if (e_raw < 8192)                              his[chan][(int)(e_raw + 0.5)]++;
