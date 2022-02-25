@@ -866,11 +866,11 @@ int eventprocess(MJDetInfo *Dets, MJRunInfo *runInfo, int nChData, BdEvent *ChDa
       if (PSA.ae_t0[chan]) {
         /* adjust cut value by linear time-interpolation between neighboring calibrations
            start time of current run is stored in evtdat[12]  */
-        ae_cut += PSA.ae_t_slope[chan] * (ChData[ievt]->evbuf[14] - PSA.ae_t0[chan])/3600.0;
+        ae_cut += PSA.ae_t_slope[chan] * ((long long int) ChData[ievt]->evbuf[14] - (long long int) PSA.ae_t0[chan])/3600.0;
         if (0 && chan == 31)
           printf("chan %d   t0 %u  -> %u   delta_t %.2f hours = %.2f days slope %.3e  cut = %.2f\n",
-                 chan, PSA.ae_t0[chan], ChData[ievt]->evbuf[14], (ChData[ievt]->evbuf[14] - PSA.ae_t0[chan])/3600.0,
-                 (ChData[ievt]->evbuf[14] - PSA.ae_t0[chan])/3600.0/24.0, PSA.ae_t_slope[chan], ae_cut);
+                 chan, PSA.ae_t0[chan], ChData[ievt]->evbuf[14], ((long long int) ChData[ievt]->evbuf[14] - (long long int) PSA.ae_t0[chan])/3600.0,
+                 ((long long int) ChData[ievt]->evbuf[14] - (long long int) PSA.ae_t0[chan])/3600.0/24.0, PSA.ae_t_slope[chan], ae_cut);
       }
         
       // adjust for energy dependence of cut

@@ -294,6 +294,7 @@ int main(int argc, char **argv) {
       if (!take_mean) {
         // adjust mean to prioritize either acceptance or background rejection
         double factor = 0.5;  // fudge factor for how quickly the mean is adjusted; range should be 0.5 - 1.0
+        PSA.ae_pos[i]     = PSA1.ae_pos[i];
         PSA.ae_cut[i]    += opt_bkgnd * da * erf(factor * da / ea) / 2.0;
         PSA.dcr_lim[i]   -= opt_bkgnd * dd * erf(factor * dd / ed) / 2.0;
         PSA.lamda_lim[i] -= opt_bkgnd * dl * erf(factor * dl / el) / 2.0;

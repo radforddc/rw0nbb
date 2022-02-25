@@ -779,8 +779,8 @@ int main(int argc, char **argv) {
       // re-calculate and report cut acceptance values
       fp = fopen("aoe_eff.txt", "w");
       fprintf(fp, "#chan  SEP   err    DEP   err   Continuum err\n");
-      double s5 = 0, s6=0, s7=0, s8=0, s9=0;
-      double s0, e0, e1, e2, e3, e4, e5;
+      double s5 = 0, s0 = 0, s6=0, s7=0, s8=0, s9=0;
+      double e1, e2, e3, e4, e5;
       for (chan = 0; chan < 100; chan++) {  // HG channels ony!
         if (chan%100 >= runInfo.nGe) continue;
         s1 = (double) his[800+chan][1] - (double) his[800+chan][3]/8.0;  // DEP - bknd, all
@@ -791,29 +791,30 @@ int main(int argc, char **argv) {
         e2 = (double) his[800+chan][2] + (double) his[800+chan][4]/64.0;
         e3 = (double) his[800+chan][5] + (double) his[800+chan][7]/64.0;
         e4 = (double) his[800+chan][6] + (double) his[800+chan][8]/64.0;
-        s0 = (double) (his[800+chan][1] - his[800+chan][2]) -
-             (double) (his[800+chan][3] - his[800+chan][4])/8.0;
-        e0 = (double) (his[800+chan][1] - his[800+chan][2]) +
-             (double) (his[800+chan][3] - his[800+chan][4])/64.0;
-        if (his[800+chan][9] > 100)
-            s5 = (double) his[800+chan][10] / (double) his[800+chan][9];
 
         if (s3 < 100 || s1 < 100) continue;
-        e0 /= s0*s0;
-        e1 /= s1*s1; e2 /= s2*s2;
-        e3 /= s3*s3; e4 /= s4*s4;
-        e0 = sqrt(e0 + e1) * s0 / s1;
-        e1 = sqrt(e1 + e2) * s2 / s1;
-        e3 = sqrt(e3 + e4) * s4 / s3;
-        e5 = sqrt(1.0/(double) his[800+chan][10] + 1.0/(double) his[800+chan][9]) * s5;
+        // uncertainties on DEP, SEP, and Compton continuum at Qbb,
+        //     including covariance between all counts and cut counts
+        // see "Multi-site event discrimination for the MAJORANA DEMONSTRATOR", S.I. Alvis et al.
+        e1 /= s1; e2 /= s2; e3 /= s3; e4 /= s4;
+        e1 = sqrt(e1/s1 + e2/s2 - 2.0*e2/s1) * s2/s1;
+        e3 = sqrt(e3/s3 + e4/s4 - 2.0*e4/s3) * s4/s3;
+        if (his[800+chan][10] > 10 && his[800+chan][9] > 100) {
+          s5 = (double) his[800+chan][10];
+          s0 = (double) his[800+chan][9];
+          e5 = sqrt(1.0/s5 - 1.0/s0) * s5/s0;
+        } else {
+          s5 = e5 = 0;
+          s0 = 1;
+        }
         printf("chan %3d   SEP, DEP, continuum acceptance:  %.4f(%.4f)  %.4f(%.4f)  %.4f(%.4f)\n",
-               chan, s4/s3, e3, s2/s1, e0, s5, e5);
+               chan, s4/s3, e3, s2/s1, e1, s5/s0, e5);
         fprintf(fp, "%4d %6.2f %5.2f %6.2f %5.2f %6.2f %5.2f\n",
-                chan, s4/s3*100.0, e3*100.0, s2/s1*100.0, e0*100.0, s5*100.0, e5*100.0);
+                chan, s4/s3*100.0, e3*100.0, s2/s1*100.0, e1*100.0, s5/s0*100.0, e5*100.0);
         if (chan%100 == 30 || chan%100 == 50) continue;  // do not include dets with bad A/E in mean value
         s6 += s4/s3;
         s7 += s2/s1;
-        s8 += s5;
+        s8 += s5/s0;
         s9++;
       }
       if (s7 > 0 && s9 > 1) {
